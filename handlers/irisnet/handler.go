@@ -47,7 +47,7 @@ func Run(peerAddr string) {
 	log.Info("P2P handshake successful with ", remoteID, "; node has moniker: ", nodeInfo.Moniker)
 
 	log.Info("Setting up persistent connectivity with TM Core")
-	bufConnReader := bufio.NewReaderSize(c, 102400) // 100KB
+	bufConnReader := bufio.NewReaderSize(secretConn, 102400) // 100KB
 	// bufConnWriter := bufio.NewWriterSize(c, 204800) // 200KB
 
 	recvRoutine(bufConnReader)
