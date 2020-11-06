@@ -11,6 +11,7 @@ import (
 
 	// Tendermint Core Handlers
 	"github.com/supragya/tendermint_connector/handlers/defaulthandler"
+	"github.com/supragya/tendermint_connector/handlers/irisnet"
 )
 
 func getRPCNodeStatus(rpcAddr string) (map[string]interface{}, error) {
@@ -53,6 +54,9 @@ func invokeHandler(node handlers.NodeType, peerAddr string) {
 	log.Info("Trying to match ", node, " to available tendermint core handlers")
 
 	switch node {
+	case irisnet.ServicedTMCore:
+		log.Info("Attaching Irisnet TM Handler to service given TM core")
+		irisnet.Run(peerAddr)
 	case defaulthandler.ServicedTMCore:
 		log.Info("Attaching Default TM Handler to the service given TM core")
 		defaulthandler.Run()
