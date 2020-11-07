@@ -5,6 +5,8 @@ go 1.15
 require (
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
+	github.com/go-kit/kit v0.10.0
+	github.com/go-logfmt/logfmt v0.5.0
 	github.com/gogo/protobuf v1.3.1
 	github.com/golang/protobuf v1.4.0
 	github.com/libp2p/go-buffer-pool v0.0.2
