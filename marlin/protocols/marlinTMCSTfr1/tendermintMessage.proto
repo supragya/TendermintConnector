@@ -1,0 +1,7 @@
+syntax = "proto3";
+package marlinTMCSTfr1;
+
+message TendermintMessage {
+    uint32 chainId = 1;
+    bytes  data = 3;
+}

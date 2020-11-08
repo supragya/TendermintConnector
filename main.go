@@ -16,12 +16,9 @@ limitations under the License.
 package main
 
 import (
-	"fmt"
-
 	"github.com/supragya/tendermint_connector/cmd"
 )
 
 func main() {
-	fmt.Println("Tendermint Connector for Marlin Protocol")
 	cmd.Execute()
 }

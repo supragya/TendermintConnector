@@ -2,6 +2,7 @@ package irisnet
 
 import (
 	"encoding/hex"
+	"fmt"
 	"net"
 	"time"
 	"os"
@@ -16,6 +17,10 @@ import (
 	cmn "github.com/supragya/tendermint_connector/handlers/irisnet/libs/common"
 	amino "github.com/tendermint/go-amino"
 	"github.com/tendermint/tendermint/crypto/ed25519"
+
+	// Protocols
+	"github.com/supragya/tendermint_connector/marlin"
+	"github.com/supragya/tendermint_connector/marlin/protocols/marlinTMCSTfr1"
 )
 
 var ServicedTMCore handlers.NodeType = handlers.NodeType{Version: "0.32.2", Network: "irishub", ProtocolVersionApp: "2", ProtocolVersionBlock: "9", ProtocolVersionP2p: "5"}
@@ -58,8 +63,9 @@ func Run(peerAddr string) {
 }
 
 func setupConnection(cdc *amino.Codec, secretConn net.Conn) {
-	// Register Packet Types
+	// Register Messages
 	RegisterPacket(cdc)
+	RegisterConsensusMessages(cdc)
 
 	// Create a P2P Connection
 	p2pConnection := P2PConnection{
@@ -85,7 +91,7 @@ func setupConnection(cdc *amino.Codec, secretConn net.Conn) {
 }
 // sendRoutine polls for packets to send from channels.
 func (c *P2PConnection) sendRoutine(cdc *amino.Codec) {
-	log.Info("Started sendRoutine")
+	log.Info("node <- connector Routine Started")
 	for {
 		// var _n int64
 	SELECTION:
@@ -164,7 +170,9 @@ func (c *P2PConnection) stopPongTimer() {
 }
 
 func (c *P2PConnection) recvRoutine(cdc *amino.Codec) {
-	log.Info("Started recvRoutine")
+	log.Info("node -> connector Routine Started")
+	var recvBuffer []byte
+	_ = fmt.Sprintf("")
 FOR_LOOP:
 	for {
 		// Block until .recvMonitor says we can read.
@@ -172,16 +180,16 @@ FOR_LOOP:
 
 		// Peek into bufConnReader for debugging
 
-		if numBytes := c.bufConnReader.Buffered(); numBytes > 0 {
-			bz, err := c.bufConnReader.Peek(cmn.MinInt(numBytes, 100))
-			if err == nil {
-				// return
-			} else {
-				log.Debug("Error peeking connection buffer ", "err ", err)
-				// return nil
-			}
-			log.Info("Peek connection buffer ", "numBytes ", numBytes, " bz ", bz)
-		}
+		// if numBytes := c.bufConnReader.Buffered(); numBytes > 0 {
+		// 	bz, err := c.bufConnReader.Peek(cmn.MinInt(numBytes, 100))
+		// 	if err == nil {
+		// 		// return
+		// 	} else {
+		// 		log.Debug("Error peeking connection buffer ", "err ", err)
+		// 		// return nil
+		// 	}
+		// 	log.Info("Peek connection buffer ", "numBytes ", numBytes, " bz ", bz)
+		// }
 		
 		// Read packet type
 		var packet Packet
@@ -226,41 +234,23 @@ FOR_LOOP:
 		case PacketMsg:
 			switch pkt.ChannelID {
 			case channelBc:
-				log.Info("Recieved BlockChain Channel message")
+				log.Info("node -> connector Blockhain")
 			case channelCsSt:
-				log.Info("Recieved Consensus State Channel message")
-			case channelCsDC:
-				log.Info("Recieved Consensus Data Channel message")
-			case channelCsVo:
-				log.Info("Recieved Consensus Vote Channel message")
-			case channelCsVs:
-				log.Info("Recieved Consensus Vote setbits Channel message")
-			case channelMm:
-				log.Info("Recieved Consensus Mempool Channel message")
-			case channelEv:
-				log.Info("Recieved Consensus Evidence Channel message")
+				recvBuffer = append(recvBuffer, pkt.Bytes...)
+				if pkt.EOF == byte(0x01) {
+					var cmsg ConsensusMessage
+					err := cdc.UnmarshalBinaryBare(recvBuffer, &cmsg)
+					if err != nil {
+						log.Error("node -> connector Consensus_State ", fmt.Sprintf("%X", recvBuffer), " err: ", err, " cmsg: ", cmsg, reflect.TypeOf(cmsg))
+					} else {
+						log.Info("node -> connector Consensus_State ", cmsg)
+						marlin.Send("irisnet-0.16.3-mainnet", recvBuffer, marlinTMCSTfr1.Version)
+					}
+					recvBuffer = recvBuffer[:0]
+				}
 			default:
 				log.Error("Unknown ChannelID Message recieved. Cannot service this message")
 			}
-			// channel, ok := c.channelsIdx[pkt.ChannelID]
-			// if !ok || channel == nil {
-			// 	err := fmt.Errorf("Unknown channel %X", pkt.ChannelID)
-			// 	log.Error("Connection failed @ recvRoutine", "conn", c, "err", err)
-			// 	c.stopForError(err)
-			// 	break FOR_LOOP
-			// }
-
-			// msgBytes, err := channel.recvPacketMsg(pkt)
-			// if err != nil {
-			// 	log.Error("Connection failed @ recvRoutine", "conn", c, "err", err)
-			// 	c.stopForError(err)
-			// 	break FOR_LOOP
-			// }
-			// if msgBytes != nil {
-			// 	c.Logger.Debug("Received bytes", "chID", pkt.ChannelID, "msgBytes", fmt.Sprintf("%X", msgBytes))
-			// 	// NOTE: This means the reactor.Receive runs in the same thread as the p2p recv routine
-			// 	c.onReceive(pkt.ChannelID, msgBytes)
-			// }
 		default:
 			log.Errorf("Unknown message type ", reflect.TypeOf(packet))
 			log.Error("Connection failed @ recvRoutine", "conn", c, "err", err)

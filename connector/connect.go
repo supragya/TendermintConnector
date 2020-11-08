@@ -9,6 +9,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/supragya/tendermint_connector/handlers"
 
+	"github.com/supragya/tendermint_connector/marlin"
+
 	// Tendermint Core Handlers
 	"github.com/supragya/tendermint_connector/handlers/defaulthandler"
 	"github.com/supragya/tendermint_connector/handlers/irisnet"
@@ -66,12 +68,14 @@ func invokeHandler(node handlers.NodeType, peerAddr string) {
 	}
 }
 
-func Connect(peerPort int, rpcPort int, serverAddr string) {
+func Connect(peerPort int, rpcPort int, marlinPort int, serverAddr string) {
 	peerAddr := fmt.Sprintf("%v:%v", serverAddr, peerPort)
 	rpcAddr := fmt.Sprintf("%v:%v", serverAddr, rpcPort)
+	marlinAddr := fmt.Sprintf("%v:%v", serverAddr, marlinPort)
 
 	log.Info("ConnectPort to peer: " + peerAddr)
 	log.Info("RPCPort to peer: " + rpcAddr)
+	log.Info("MarlinTCPBridge connection: "+marlinAddr)
 
 	nodeStatus, err := getRPCNodeStatus(rpcAddr)
 	if err != nil {
@@ -79,6 +83,8 @@ func Connect(peerPort int, rpcPort int, serverAddr string) {
 	}
 
 	nodeInfo := extractNodeInfo(nodeStatus)
+
+	marlin.ConnectMarlinBridge(marlinAddr)
 
 	invokeHandler(nodeInfo["nodeType"].(handlers.NodeType), peerAddr)
 }
