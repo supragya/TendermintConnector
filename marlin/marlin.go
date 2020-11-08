@@ -4,6 +4,9 @@ import (
 	"net"
 	"bufio"
 	"os"
+	"io"
+	// "io/ioutil"
+	"time"
 	"encoding/binary"
 
 	log "github.com/sirupsen/logrus"
@@ -15,10 +18,31 @@ import (
 
 func recvRoutine() {
 	log.Info("mrln -> connector Routine started")
+	for {
+		messageLenByte0, err1 := marlinConn.ReadByte()
+		messageLenByte1, err2 := marlinConn.ReadByte()
+
+		if err1 != nil || err2 != nil {
+			log.Error("Error reading message size from the buffer")
+		}
+
+		messageLen := binary.LittleEndian.Uint16([]byte{messageLenByte0, messageLenByte1})
+
+		var buffer = make([]byte, messageLen)
+		n, err := io.ReadFull(marlinConn, buffer)
+		if err != nil {
+			log.Error("Error reading message of size ", messageLen, " instead read ", n)
+		}
+		
+		tmMessage := marlinTMCSTfr1.TendermintMessage{}
+		proto.Unmarshal(buffer, &tmMessage)
+		log.Info("mrln -> connector recieved message: ", tmMessage.GetData())
+
+		time.Sleep(200 * time.Millisecond)
+	}
 }
 
-var marlinReader *bufio.Reader
-var marlinWriter *bufio.Writer
+var marlinConn *bufio.ReadWriter
 
 func ConnectMarlinBridge(marlinAddr string) {
 	conn, err := net.Dial("tcp", marlinAddr)
@@ -27,8 +51,8 @@ func ConnectMarlinBridge(marlinAddr string) {
 		os.Exit(2)
 	}
 
-	marlinReader = bufio.NewReader(conn)
-	marlinWriter = bufio.NewWriter(conn)
+	marlinConn = bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
+
 	go recvRoutine()
 }
 
@@ -39,10 +63,9 @@ func Send(chainID string, data []byte, encoderVersion uint16) {
 		return
 	}
 
-	encoderVersionBinary := make([]byte, 2)
+	messageLen := make([]byte, 2)
 	switch encoderVersion {
 	case marlinTMCSTfr1.Version:
-		binary.LittleEndian.PutUint16(encoderVersionBinary, marlinTMCSTfr1.Version)
 		sendData := &marlinTMCSTfr1.TendermintMessage{
 			ChainId: chainIDNum,
 			Data:	data,
@@ -52,9 +75,10 @@ func Send(chainID string, data []byte, encoderVersion uint16) {
 			log.Error("Error encountered while marshalling marlinTMSCTfr1 message.")
 		}
 
-		encodedData = append(encoderVersionBinary, encodedData...)
+		binary.LittleEndian.PutUint16(messageLen, uint16(len(encodedData)))
+		encodedData = append(messageLen, encodedData...)
 		
-		n, err := marlinWriter.Write(encodedData)
+		n, err := marlinConn.Write(encodedData)
 		if err != nil {
 			log.Error("Error encountered when writing to marlin TCP Bridge: ", err)
 			os.Exit(2)
@@ -62,7 +86,7 @@ func Send(chainID string, data []byte, encoderVersion uint16) {
 			log.Error("Too few data pushed to marlin TCP Bridge: ", n, " vs ", len(encodedData))
 			os.Exit(2)
 		}
-		err = marlinWriter.Flush()
+		err = marlinConn.Flush()
 		if err != nil {
 			log.Error("Error flushing marlinWriter buffer, err: ", err)
 			os.Exit(2)
