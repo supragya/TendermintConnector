@@ -9,23 +9,26 @@ import (
 	"bufio"
 	"io"
 	"reflect"
+	"errors"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/supragya/tendermint_connector/handlers"
 	"github.com/supragya/tendermint_connector/handlers/irisnet/conn"
+	marlinTypes "github.com/supragya/tendermint_connector/types"
 	flow "github.com/supragya/tendermint_connector/handlers/irisnet/libs/flowrate"
 	cmn "github.com/supragya/tendermint_connector/handlers/irisnet/libs/common"
 	amino "github.com/tendermint/go-amino"
 	"github.com/tendermint/tendermint/crypto/ed25519"
+	"github.com/tendermint/tendermint/crypto/merkle"
 
 	// Protocols
 	"github.com/supragya/tendermint_connector/marlin"
-	"github.com/supragya/tendermint_connector/marlin/protocols/marlinTMCSTfr1"
 )
 
 var ServicedTMCore handlers.NodeType = handlers.NodeType{Version: "0.32.2", Network: "irishub", ProtocolVersionApp: "2", ProtocolVersionBlock: "9", ProtocolVersionP2p: "5"}
 
-func Run(peerAddr string) {
+func Run(peerAddr string, marlinTo chan<- marlinTypes.MarlinMessage, marlinFrom <-chan marlinTypes.MarlinMessage) {
 	log.Info("Starting Irisnet Tendermint Core Handler - 0.16.3-d83fc038-2-mainnet")
 
 	log.Info("Attempting to open TCP connection to ", peerAddr)
@@ -57,12 +60,12 @@ func Run(peerAddr string) {
 	log.Info("P2P handshake successful with ", remoteID, "; node has moniker: ", nodeInfo.Moniker)
 
 	log.Info("Setting up persistent connectivity with TM Core")
-	setupConnection(cdc, secretConn)
+	setupConnection(cdc, secretConn, marlinTo, marlinFrom)
 
 	time.Sleep(100000 * time.Second)
 }
 
-func setupConnection(cdc *amino.Codec, secretConn net.Conn) {
+func setupConnection(cdc *amino.Codec, secretConn net.Conn, marlinTo chan<- marlinTypes.MarlinMessage, marlinFrom <-chan marlinTypes.MarlinMessage) {
 	// Register Messages
 	RegisterPacket(cdc)
 	RegisterConsensusMessages(cdc)
@@ -84,26 +87,28 @@ func setupConnection(cdc *amino.Codec, secretConn net.Conn) {
 		pongTimeoutCh: make(chan bool, 1),
 	}
 
+	servicedChainId, ok := marlinTypes.ServicedChains["irisnet-0.16.3-mainnet"]
+	if !ok {
+		log.Error("Chain is not serviced (irisnet-0.16.3-mainnet) by marlin")
+	}
+
+	marlin.AllowServicedChainMessages(servicedChainId)
+
+	throughput := throughPutData{}
+	go throughput.presentThroughput(5)
+
 	// Start P2P Send and recieve routines
-	go p2pConnection.sendRoutine(cdc)
-	go p2pConnection.recvRoutine(cdc)
+	go p2pConnection.sendRoutine(cdc, &throughput, marlinFrom)
+	go p2pConnection.recvRoutine(cdc, &throughput, marlinTo, servicedChainId)
 
 }
 // sendRoutine polls for packets to send from channels.
-func (c *P2PConnection) sendRoutine(cdc *amino.Codec) {
+func (c *P2PConnection) sendRoutine(cdc *amino.Codec, throughput *throughPutData, marlinFrom <-chan marlinTypes.MarlinMessage) {
 	log.Info("node <- connector Routine Started")
 	for {
 		// var _n int64
 	SELECTION:
 		select {
-		// case <-c.flushTimer.Ch:
-		// 	// NOTE: flushTimer.Set() must be called every time
-		// 	// something is written to .bufConnWriter.
-		// 	c.flush()
-		// case <-c.chStatsTimer.C:
-		// 	for _, channel := range c.channels {
-		// 		channel.updateStats()
-		// 	}
 		case <-c.pingTimer.C:
 			_n, err := cdc.MarshalBinaryLengthPrefixedWriter(c.bufConnWriter, PacketPing{})
 			if err != nil {
@@ -131,18 +136,47 @@ func (c *P2PConnection) sendRoutine(cdc *amino.Codec) {
 			}
 			c.sendMonitor.Update(int(_n))
 			c.flush()
-		// case <-c.quitSendRoutine:
-		// 	break FOR_LOOP
-		// case <-c.send:
-		// 	// Send some PacketMsgs
-		// 	eof := c.sendSomePacketMsgs()
-		// 	if !eof {
-		// 		// Keep sendRoutine awake.
-		// 		select {
-		// 		case c.send <- struct{}{}:
-		// 		default:
-		// 		}
-		// 	}
+
+		case msg := <-marlinFrom:
+			switch msg.Channel {
+			case marlinTypes.ChannelConsensusState:
+				log.Debug("node <- connector message from Marlin: ", msg)
+				packet := PacketMsg{
+					ChannelID: channelCsSt,
+					EOF: byte(0x01),
+					Bytes: msg.Data,
+				}
+
+				var cmsg ConsensusMessage
+				err := cdc.UnmarshalBinaryBare(msg.Data, &cmsg)
+				if err != nil {
+					throughput.postThroughput("to", 0, 1, 0, len(msg.Data))
+					log.Debug("Cannot unmnarshal data during unmarshalling test: ", err)
+					break SELECTION
+				}
+
+				ec, err := cdc.MarshalBinaryLengthPrefixed(packet)
+				if err != nil {
+					log.Error("Error encountered while Marshalling Data to packet")
+				}
+				
+				// if err !- nil {
+				// 	log.Error("node <- connector error in encoding packet")
+				// }
+				n, err := c.bufConnWriter.Write(ec)
+				if err != nil {
+					log.Error("node <- connector Error encountered when writing to TM peer: ", err)
+					os.Exit(2)
+				} else if n < len(msg.Data) {
+					log.Error("node <- connector Too few data pushed to TM peer: ", n, " vs ", len(msg.Data))
+					os.Exit(2)
+				}
+				c.flush()
+				throughput.postThroughput("to", 1, 0, len(msg.Data), 0)
+			default:
+				log.Error("node <- connector Not servicing undecipherable channel ", msg.Channel)
+			}
+			
 		}
 
 	}
@@ -169,7 +203,7 @@ func (c *P2PConnection) stopPongTimer() {
 	}
 }
 
-func (c *P2PConnection) recvRoutine(cdc *amino.Codec) {
+func (c *P2PConnection) recvRoutine(cdc *amino.Codec, throughput *throughPutData, marlinTo chan<- marlinTypes.MarlinMessage, chainId uint32) {
 	log.Info("node -> connector Routine Started")
 	var recvBuffer []byte
 	_ = fmt.Sprintf("")
@@ -206,7 +240,7 @@ FOR_LOOP:
 			}
 
 			if err == io.EOF {
-				log.Info("Connection is closed @ recvRoutine (likely by the other side)", "conn", c)
+				log.Error("Connection is closed @ recvRoutine (likely by the other side)", "conn", c)
 			} else {
 				log.Error("Connection failed @ recvRoutine (reading byte)", " conn ", c, " err ", err)
 			}
@@ -234,22 +268,41 @@ FOR_LOOP:
 		case PacketMsg:
 			switch pkt.ChannelID {
 			case channelBc:
-				log.Info("node -> connector Blockhain")
+				log.Debug("node -> connector Blockhain is not serviced")
 			case channelCsSt:
 				recvBuffer = append(recvBuffer, pkt.Bytes...)
 				if pkt.EOF == byte(0x01) {
+					message := marlinTypes.MarlinMessage{
+						ChainID: chainId,
+						Channel: marlinTypes.ChannelConsensusState,
+						Data: recvBuffer,
+					}
+
 					var cmsg ConsensusMessage
 					err := cdc.UnmarshalBinaryBare(recvBuffer, &cmsg)
 					if err != nil {
-						log.Error("node -> connector Consensus_State ", fmt.Sprintf("%X", recvBuffer), " err: ", err, " cmsg: ", cmsg, reflect.TypeOf(cmsg))
+						throughput.postThroughput("from", 0, 1, 0, len(recvBuffer))
+						log.Error("node -> connector Consensus_State, unable to pass marshalling test ", fmt.Sprintf("%X", recvBuffer), " err: ", err, " cmsg: ", cmsg, reflect.TypeOf(cmsg))
 					} else {
-						log.Info("node -> connector Consensus_State ", cmsg)
-						marlin.Send("irisnet-0.16.3-mainnet", recvBuffer, marlinTMCSTfr1.Version)
+						marlinTo <- message
+						throughput.postThroughput("from", 1, 0, len(recvBuffer), 0)
+						log.Debug("node -> connector Created message for marlin: ", message)
 					}
+					// marlinTo <- message
 					recvBuffer = recvBuffer[:0]
 				}
+			case channelCsDC:
+				log.Debug("node -> connector Consensensus Data Channel is not serviced")
+			case channelCsVo:
+				log.Debug("node -> connector Consensensus Vote Channel is not serviced")
+			case channelCsVs:
+				log.Debug("node -> connector Consensensus Vote Set Bits Channel is not serviced")
+			case channelMm:
+				log.Debug("node -> connector Mempool Channel is not serviced")
+			case channelEv:
+				log.Debug("node -> connector Evidence Channel is not serviced")
 			default:
-				log.Error("Unknown ChannelID Message recieved. Cannot service this message")
+				log.Error("Unknown ChannelID Message recieved, channel unknown even to Tendermint Core. Cannot service this message ", pkt.ChannelID)
 			}
 		default:
 			log.Errorf("Unknown message type ", reflect.TypeOf(packet))
@@ -280,15 +333,8 @@ func handshake(
 			"tcp://127.0.0.1:20006",
 			"irishub",
 			"0.32.2",
-			[]byte{
-				channelBc,
-				channelCsSt,
-				channelCsDC,
-				channelCsVo,
-				channelCsVs,
-				channelMm,
-				channelEv,
-			},
+			[]byte{ channelBc, channelCsSt, channelCsDC, channelCsVo,
+					channelCsVs, channelMm, channelEv, },
 			"marlin-tendermint-connector",
 			DefaultNodeInfoOther{"on", "tcp://0.0.0.0:26667"},
 		}
@@ -323,3 +369,526 @@ func handshake(
 
 	return peerNodeInfo, c.SetDeadline(time.Time{})
 }
+
+func (t *throughPutData) postThroughput(direction string, count int, fatalCount int, bytes int, fatalBytes int) {
+	t.mu.Lock()
+	switch direction {
+	case "to":
+		t.nodeToCount += count
+		t.nodeToFatalCount += fatalCount
+		t.nodeToBytes += bytes
+		t.nodeToFatalBytes += fatalBytes
+	case "from":
+		t.nodeFromCount += count
+		t.nodeFromFatalCount += fatalCount
+		t.nodeFromBytes += bytes
+		t.nodeFromFatalBytes += fatalBytes
+	}
+	t.mu.Unlock()
+}
+
+func (t *throughPutData) presentThroughput(sec time.Duration) {
+	for {
+		time.Sleep(sec * time.Second)
+		t.mu.Lock()
+		log.Info(fmt.Sprintf("Transfers to irisnet peer: (cnt: %6v, Fcnt: %6v, byt: %6v Fbyt: %6v); from irisnet peer: (cnt: %6v, Fcnt: %6v, byt: %6v Fbyt: %6v)",
+					t.nodeToCount, t.nodeToFatalCount, t.nodeToBytes, t.nodeToFatalBytes,
+					t.nodeFromCount, t.nodeFromFatalCount, t.nodeFromBytes, t.nodeFromFatalBytes))
+		
+		t.nodeToCount		=0
+		t.nodeToFatalCount	=0
+		t.nodeToBytes		=0
+		t.nodeToFatalBytes	=0
+		t.nodeFromCount		=0
+		t.nodeFromFatalCount	=0
+		t.nodeFromBytes		=0
+		t.nodeFromFatalBytes=0
+		t.mu.Unlock()
+	}
+}
+
+// -------- STRUCTS -------
+
+type throughPutData struct {
+	nodeToCount			int
+	nodeToFatalCount	int
+	nodeToBytes			int
+	nodeToFatalBytes	int
+	nodeFromCount		int
+	nodeFromFatalCount	int
+	nodeFromBytes		int
+	nodeFromFatalBytes	int
+	mu					sync.Mutex
+}
+
+type ProtocolVersion struct {
+	P2P   uint64 `json:"p2p"`
+	Block uint64 `json:"block"`
+	App   uint64 `json:"app"`
+}
+
+type DefaultNodeInfo struct {
+	ProtocolVersion ProtocolVersion `json:"protocol_version"`
+
+	// Authenticate
+	// TODO: replace with NetAddress
+	ID_        string `json:"id"`          // authenticated identifier
+	ListenAddr string `json:"listen_addr"` // accepting incoming
+
+	// Check compatibility.
+	// Channels are HexBytes so easier to read as JSON
+	Network  string       `json:"network"`  // network/chain ID
+	Version  string       `json:"version"`  // major.minor.revision
+	Channels cmn.HexBytes `json:"channels"` // channels this node knows about
+
+	// ASCIIText fields
+	Moniker string               `json:"moniker"` // arbitrary moniker
+	Other   DefaultNodeInfoOther `json:"other"`   // other application specific data
+}
+
+// DefaultNodeInfoOther is the misc. applcation specific data
+type DefaultNodeInfoOther struct {
+	TxIndex    string `json:"tx_index"`
+	RPCAddress string `json:"rpc_address"`
+}
+
+type P2PConnection struct {
+
+	conn          net.Conn
+	bufConnReader *bufio.Reader
+	bufConnWriter *bufio.Writer
+	sendMonitor   *flow.Monitor
+	recvMonitor   *flow.Monitor
+	send          chan struct{}
+	pong          chan struct{}
+	// channels      []*Channel
+	// channelsIdx   map[byte]*Channel
+	errored       uint32
+
+	// Closing quitSendRoutine will cause the sendRoutine to eventually quit.
+	// doneSendRoutine is closed when the sendRoutine actually quits.
+	quitSendRoutine chan struct{}
+	doneSendRoutine chan struct{}
+
+	// Closing quitRecvRouting will cause the recvRouting to eventually quit.
+	quitRecvRoutine chan struct{}
+
+	// used to ensure FlushStop and OnStop
+	// are safe to call concurrently.
+	stopMtx sync.Mutex
+
+	flushTimer *cmn.ThrottleTimer // flush writes as necessary but throttled.
+	pingTimer  *time.Ticker       // send pings periodically
+
+	// close conn if pong is not received in pongTimeout
+	pongTimer     *time.Timer
+	pongTimeoutCh chan bool // true - timeout, false - peer sent pong
+
+	chStatsTimer *time.Ticker // update channel stats periodically
+
+	created time.Time // time of creation
+
+	_maxPacketMsgSize int
+}
+
+
+//----------------------------------------
+// Packet
+
+type Packet interface {
+	AssertIsPacket()
+}
+
+func RegisterPacket(cdc *amino.Codec) {
+	cdc.RegisterInterface((*Packet)(nil), nil)
+	cdc.RegisterConcrete(PacketPing{}, "tendermint/p2p/PacketPing", nil)
+	cdc.RegisterConcrete(PacketPong{}, "tendermint/p2p/PacketPong", nil)
+	cdc.RegisterConcrete(PacketMsg{}, "tendermint/p2p/PacketMsg", nil)
+}
+
+func (_ PacketPing) AssertIsPacket() {}
+func (_ PacketPong) AssertIsPacket() {}
+func (_ PacketMsg) AssertIsPacket()  {}
+
+type PacketPing struct {
+}
+
+type PacketPong struct {
+}
+
+type PacketMsg struct {
+	ChannelID byte
+	EOF       byte // 1 means message ends here.
+	Bytes     []byte
+}
+
+func (mp PacketMsg) String() string {
+	return fmt.Sprintf("PacketMsg{%X:%X T:%X}", mp.ChannelID, mp.Bytes, mp.EOF)
+}
+
+
+
+// Consensus Message
+type ConsensusMessage interface {
+	ValidateBasic() error
+}
+
+func RegisterConsensusMessages(cdc *amino.Codec) {
+	cdc.RegisterInterface((*ConsensusMessage)(nil), nil)
+	cdc.RegisterConcrete(&NewRoundStepMessage{}, "tendermint/NewRoundStepMessage", nil)
+	cdc.RegisterConcrete(&NewValidBlockMessage{}, "tendermint/NewValidBlockMessage", nil)
+	cdc.RegisterConcrete(&ProposalMessage{}, "tendermint/Proposal", nil)
+	cdc.RegisterConcrete(&ProposalPOLMessage{}, "tendermint/ProposalPOL", nil)
+	cdc.RegisterConcrete(&BlockPartMessage{}, "tendermint/BlockPart", nil)
+	cdc.RegisterConcrete(&VoteMessage{}, "tendermint/Vote", nil)
+	cdc.RegisterConcrete(&HasVoteMessage{}, "tendermint/HasVote", nil)
+	cdc.RegisterConcrete(&VoteSetMaj23Message{}, "tendermint/VoteSetMaj23", nil)
+	cdc.RegisterConcrete(&VoteSetBitsMessage{}, "tendermint/VoteSetBits", nil)
+}
+
+//-------------------------------------
+
+
+// NewRoundStepMessage is sent for every step taken in the ConsensusState.
+// For every height/round/step transition
+type NewRoundStepMessage struct {
+	Height                int64
+	Round                 int
+	Step                  uint8
+	SecondsSinceStartTime int
+	LastCommitRound       int
+}
+
+// ValidateBasic performs basic validation.
+func (m *NewRoundStepMessage) ValidateBasic() error {
+	if m.Height < 0 {
+		return errors.New("Negative Height")
+	}
+	if m.Round < 0 {
+		return errors.New("Negative Round")
+	}
+	// if !m.Step.IsValid() {
+	// 	return errors.New("Invalid Step")
+	// }
+
+	// NOTE: SecondsSinceStartTime may be negative
+
+	if (m.Height == 1 && m.LastCommitRound != -1) ||
+		(m.Height > 1 && m.LastCommitRound < -1) { // TODO: #2737 LastCommitRound should always be >= 0 for heights > 1
+		return errors.New("Invalid LastCommitRound (for 1st block: -1, for others: >= 0)")
+	}
+	return nil
+}
+
+// String returns a string representation.
+func (m *NewRoundStepMessage) String() string {
+	return fmt.Sprintf("[NewRoundStep H:%v R:%v S:%v LCR:%v]",
+		m.Height, m.Round, m.Step, m.LastCommitRound)
+}
+
+//-------------------------------------
+
+// NewValidBlockMessage is sent when a validator observes a valid block B in some round r,
+//i.e., there is a Proposal for block B and 2/3+ prevotes for the block B in the round r.
+// In case the block is also committed, then IsCommit flag is set to true.
+type PartSetHeader struct {
+	Total int          `json:"total"`
+	Hash  cmn.HexBytes `json:"hash"`
+}
+
+type BitArray struct {
+	mtx   sync.Mutex
+	Bits  int      `json:"bits"`  // NOTE: persisted via reflect, must be exported
+	Elems []uint64 `json:"elems"` // NOTE: persisted via reflect, must be exported
+}
+
+// Size returns the number of bits in the bitarray
+func (bA *BitArray) Size() int {
+	if bA == nil {
+		return 0
+	}
+	return bA.Bits
+}
+
+type NewValidBlockMessage struct {
+	Height           int64
+	Round            int
+	BlockPartsHeader PartSetHeader
+	BlockParts       BitArray
+	IsCommit         bool
+}
+
+// ValidateBasic performs basic validation.
+func (m *NewValidBlockMessage) ValidateBasic() error {
+	if m.Height < 0 {
+		return errors.New("Negative Height")
+	}
+	if m.Round < 0 {
+		return errors.New("Negative Round")
+	}
+	// if err := m.BlockPartsHeader.ValidateBasic(); err != nil {
+	// 	return fmt.Errorf("Wrong BlockPartsHeader: %v", err)
+	// }
+	if m.BlockParts.Size() == 0 {
+		return errors.New("Empty BlockParts")
+	}
+	if m.BlockParts.Size() != m.BlockPartsHeader.Total {
+		return fmt.Errorf("BlockParts bit array size %d not equal to BlockPartsHeader.Total %d",
+			m.BlockParts.Size(),
+			m.BlockPartsHeader.Total)
+	}
+	// if m.BlockParts.Size() > types.MaxBlockPartsCount {
+	// 	return errors.Errorf("BlockParts bit array is too big: %d, max: %d", m.BlockParts.Size(), types.MaxBlockPartsCount)
+	// }
+	return nil
+}
+
+// String returns a string representation.
+func (m *NewValidBlockMessage) String() string {
+	return fmt.Sprintf("[ValidBlockMessage H:%v R:%v BP:%v BA:%v IsCommit:%v]",
+		m.Height, m.Round, m.BlockPartsHeader, m.BlockParts, m.IsCommit)
+}
+
+//-------------------------------------
+
+type Proposal struct {
+	Type      byte
+	Height    int64     `json:"height"`
+	Round     int       `json:"round"`
+	POLRound  int       `json:"pol_round"` // -1 if null.
+	BlockID   BlockID   `json:"block_id"`
+	Timestamp time.Time `json:"timestamp"`
+	Signature []byte    `json:"signature"`
+}
+
+type BlockID struct {
+	Hash        cmn.HexBytes  `json:"hash"`
+	PartsHeader PartSetHeader `json:"parts"`
+}
+
+// ProposalMessage is sent when a new block is proposed.
+type ProposalMessage struct {
+	Proposal Proposal
+}
+
+// ValidateBasic performs basic validation.
+func (m *ProposalMessage) ValidateBasic() error {
+	return nil
+}
+
+// String returns a string representation.
+func (m *ProposalMessage) String() string {
+	return fmt.Sprintf("[Proposal %v]", m.Proposal)
+}
+
+//-------------------------------------
+
+// ProposalPOLMessage is sent when a previous proposal is re-proposed.
+type ProposalPOLMessage struct {
+	Height           int64
+	ProposalPOLRound int
+	ProposalPOL      *cmn.BitArray
+}
+
+// ValidateBasic performs basic validation.
+func (m *ProposalPOLMessage) ValidateBasic() error {
+	if m.Height < 0 {
+		return errors.New("Negative Height")
+	}
+	if m.ProposalPOLRound < 0 {
+		return errors.New("Negative ProposalPOLRound")
+	}
+	if m.ProposalPOL.Size() == 0 {
+		return errors.New("Empty ProposalPOL bit array")
+	}
+	// if m.ProposalPOL.Size() > types.MaxVotesCount {
+	// 	return errors.Errorf("ProposalPOL bit array is too big: %d, max: %d", m.ProposalPOL.Size(), types.MaxVotesCount)
+	// }
+	return nil
+}
+
+// String returns a string representation.
+func (m *ProposalPOLMessage) String() string {
+	return fmt.Sprintf("[ProposalPOL H:%v POLR:%v POL:%v]", m.Height, m.ProposalPOLRound, m.ProposalPOL)
+}
+
+//-------------------------------------
+
+type Part struct {
+	Index int                `json:"index"`
+	Bytes cmn.HexBytes       `json:"bytes"`
+	Proof merkle.SimpleProof `json:"proof"`
+
+	// Cache
+	hash []byte
+}
+
+// BlockPartMessage is sent when gossipping a piece of the proposed block.
+type BlockPartMessage struct {
+	Height int64
+	Round  int
+	Part   Part
+}
+
+// ValidateBasic performs basic validation.
+func (m *BlockPartMessage) ValidateBasic() error {
+	if m.Height < 0 {
+		return errors.New("Negative Height")
+	}
+	if m.Round < 0 {
+		return errors.New("Negative Round")
+	}
+	// if err := m.Part.ValidateBasic(); err != nil {
+	// 	return fmt.Errorf("Wrong Part: %v", err)
+	// }
+	return nil
+}
+
+// String returns a string representation.
+func (m *BlockPartMessage) String() string {
+	return fmt.Sprintf("[BlockPart H:%v R:%v P:%v]", m.Height, m.Round, m.Part)
+}
+
+//-------------------------------------
+
+// Vote represents a prevote, precommit, or commit vote from validators for
+// consensus.
+type Vote struct {
+	Type             byte `json:"type"`
+	Height           int64         `json:"height"`
+	Round            int           `json:"round"`
+	BlockID          BlockID       `json:"block_id"` // zero if vote is nil.
+	Timestamp        time.Time     `json:"timestamp"`
+	ValidatorAddress cmn.HexBytes       `json:"validator_address"`
+	ValidatorIndex   int           `json:"validator_index"`
+	Signature        []byte        `json:"signature"`
+}
+
+// VoteMessage is sent when voting for a proposal (or lack thereof).
+type VoteMessage struct {
+	Vote Vote
+}
+
+// ValidateBasic performs basic validation.
+func (m *VoteMessage) ValidateBasic() error {
+	return nil
+}
+
+// String returns a string representation.
+func (m *VoteMessage) String() string {
+	return fmt.Sprintf("[Vote %v]", m.Vote)
+}
+
+//-------------------------------------
+
+// HasVoteMessage is sent to indicate that a particular vote has been received.
+
+
+type HasVoteMessage struct {
+	Height int64
+	Round  int
+	Type   byte
+	Index  int
+}
+
+// ValidateBasic performs basic validation.
+func (m *HasVoteMessage) ValidateBasic() error {
+	if m.Height < 0 {
+		return errors.New("Negative Height")
+	}
+	if m.Round < 0 {
+		return errors.New("Negative Round")
+	}
+	// if !types.IsVoteTypeValid(m.Type) {
+	// 	return errors.New("Invalid Type")
+	// }
+	if m.Index < 0 {
+		return errors.New("Negative Index")
+	}
+	return nil
+}
+
+// String returns a string representation.
+func (m *HasVoteMessage) String() string {
+	return fmt.Sprintf("[HasVote VI:%v V:{%v/%02d/%v}]", m.Index, m.Height, m.Round, m.Type)
+}
+
+//-------------------------------------
+
+// VoteSetMaj23Message is sent to indicate that a given BlockID has seen +2/3 votes.
+type VoteSetMaj23Message struct {
+	Height  int64
+	Round   int
+	Type    byte
+	BlockID BlockID
+}
+
+// ValidateBasic performs basic validation.
+func (m *VoteSetMaj23Message) ValidateBasic() error {
+	if m.Height < 0 {
+		return errors.New("Negative Height")
+	}
+	if m.Round < 0 {
+		return errors.New("Negative Round")
+	}
+	// if !types.IsVoteTypeValid(m.Type) {
+	// 	return errors.New("Invalid Type")
+	// }
+	// if err := m.BlockID.ValidateBasic(); err != nil {
+	// 	return fmt.Errorf("Wrong BlockID: %v", err)
+	// }
+	return nil
+}
+
+// String returns a string representation.
+func (m *VoteSetMaj23Message) String() string {
+	return fmt.Sprintf("[VSM23 %v/%02d/%v %v]", m.Height, m.Round, m.Type, m.BlockID)
+}
+
+//-------------------------------------
+
+// VoteSetBitsMessage is sent to communicate the bit-array of votes seen for the BlockID.
+type VoteSetBitsMessage struct {
+	Height  int64
+	Round   int
+	Type    byte
+	BlockID BlockID
+	Votes   *cmn.BitArray
+}
+
+// ValidateBasic performs basic validation.
+func (m *VoteSetBitsMessage) ValidateBasic() error {
+	if m.Height < 0 {
+		return errors.New("Negative Height")
+	}
+	if m.Round < 0 {
+		return errors.New("Negative Round")
+	}
+	// if !types.IsVoteTypeValid(m.Type) {
+	// 	return errors.New("Invalid Type")
+	// }
+	// if err := m.BlockID.ValidateBasic(); err != nil {
+	// 	return fmt.Errorf("Wrong BlockID: %v", err)
+	// }
+	// NOTE: Votes.Size() can be zero if the node does not have any
+	// if m.Votes.Size() > types.MaxVotesCount {
+	// 	return fmt.Errorf("Votes bit array is too big: %d, max: %d", m.Votes.Size(), types.MaxVotesCount)
+	// }
+	return nil
+}
+
+// String returns a string representation.
+func (m *VoteSetBitsMessage) String() string {
+	return fmt.Sprintf("[VSB %v/%02d/%v %v %v]", m.Height, m.Round, m.Type, m.BlockID, m.Votes)
+}
+
+
+const (
+	channelBc =	byte(0x40) //bc.BlockchainChannel,
+	channelCsSt =	byte(0x20) //cs.StateChannel,
+	channelCsDC =	byte(0x21) //cs.DataChannel,
+	channelCsVo =	byte(0x22) //cs.VoteChannel,
+	channelCsVs =	byte(0x23) //cs.VoteSetBitsChannel,
+	channelMm =	byte(0x30) //mempl.MempoolChannel,
+	channelEv =	byte(0x38) //evidence.EvidenceChannel,
+)

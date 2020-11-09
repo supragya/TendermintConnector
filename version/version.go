@@ -7,12 +7,12 @@ var applicationVersion string = "0.1"
 
 // Supported Chains
 var supportedChains = []string{
-	"IRISNet Mainnet 0.16.3 (Consensus State transfers)",
+	"IRISNet Mainnet 0.16.3 (Consensus State transfers) v0.1",
 }
 
 // Marlin TM Encoder/Decoder Protocols
 var marlinTMProtocols = []string{
-	"marlinTMSTfr1 - v0.1 Marlin TM Consensus State Transfer Protocol",
+	"Marlin Tendermint Data Transfer Protocol v1",
 }
 
 var RootCmdVersion string = prepareVersionString()

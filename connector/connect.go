@@ -8,6 +8,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/supragya/tendermint_connector/handlers"
+	"github.com/supragya/tendermint_connector/types"
 
 	"github.com/supragya/tendermint_connector/marlin"
 
@@ -52,13 +53,13 @@ func extractNodeInfo(rpcNodeStatus map[string]interface{}) map[string]interface{
 	}
 }
 
-func invokeHandler(node handlers.NodeType, peerAddr string) {
+func invokeHandler(node handlers.NodeType, peerAddr string, marlinTo chan<- types.MarlinMessage, marlinFrom <-chan types.MarlinMessage) {
 	log.Info("Trying to match ", node, " to available tendermint core handlers")
 
 	switch node {
 	case irisnet.ServicedTMCore:
 		log.Info("Attaching Irisnet TM Handler to service given TM core")
-		irisnet.Run(peerAddr)
+		irisnet.Run(peerAddr, marlinTo, marlinFrom)
 	case defaulthandler.ServicedTMCore:
 		log.Info("Attaching Default TM Handler to the service given TM core")
 		defaulthandler.Run()
@@ -82,9 +83,13 @@ func Connect(peerPort int, rpcPort int, marlinPort int, serverAddr string) {
 		return
 	}
 
+	// Channels
+	marlinTo := make(chan types.MarlinMessage, 1000)
+	marlinFrom := make(chan types.MarlinMessage, 1000)
+
 	nodeInfo := extractNodeInfo(nodeStatus)
 
-	marlin.ConnectMarlinBridge(marlinAddr)
+	marlin.Run(marlinAddr, marlinTo, marlinFrom)
 
-	invokeHandler(nodeInfo["nodeType"].(handlers.NodeType), peerAddr)
+	invokeHandler(nodeInfo["nodeType"].(handlers.NodeType), peerAddr, marlinTo, marlinFrom)
 }

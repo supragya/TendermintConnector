@@ -4,7 +4,7 @@ import sys
 # Create a TCP/IP socket
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-server_address = ('localhost', 15004)
+server_address = ('localhost', 15005)
 sock.bind(server_address)
 
 sock.listen(1)
@@ -18,12 +18,11 @@ while True:
 
         # Receive the data in small chunks and retransmit it
         while True:
-            data = connection.recv(1600)
+            data = connection.recv(100)
             print("Recv: ", end="")
             for i in range(len(data)):
                 print(data[i], end=" ")
             if data:
-                print("sending back")
                 connection.sendall(data)
             else:
                 break
