@@ -1,8 +1,8 @@
-# Tendermint Connector
 <p align="center">
   <img src="banner.png?raw=true" alt="Tendermint Connector Banner"/>
 </p>
 
+# Tendermint Connector
 Tendermint connector is a bridging application required for Tendermint based blockchains to interface with Marlin Protocol. Tendermint Connector connects as a peer to already running TM based blockchain and retrieves / pushes selective messages that the peer needs from / to Marlin Relays.
 
 ## Serviced Blockchains
