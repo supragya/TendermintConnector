@@ -2,8 +2,14 @@ package types
 
 type MarlinMessage struct {
 	ChainID uint32
-	Channel uint32
-	Data    []byte
+	Channel byte
+	Packets []PacketMsg
+}
+
+type PacketMsg struct {
+	ChannelID uint32
+	EOF       uint32 // 1 means message ends here.
+	Bytes     []byte
 }
 
 // DANGER - Do not change mappings for serviced chains.

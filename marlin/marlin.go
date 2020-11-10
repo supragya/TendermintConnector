@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"os"
+	// "fmt"
 	// "io/ioutil"
 	// "time"
 	"encoding/binary"
@@ -58,11 +59,23 @@ func sendRoutine(marlinTo <-chan types.MarlinMessage) {
 		}
 
 		messageLen := make([]byte, 2)
+
+		// Making PacketMsg Proto3 PacketMsg
+		wirePackets := []*wireProtocol.PacketMsg{}
+		for _, pkt := range msg.Packets {
+			wirePackets = append(wirePackets, &wireProtocol.PacketMsg{
+												Eof:	   pkt.EOF,
+												DataBytes: pkt.Bytes,
+											})
+		}
+
 		sendData := &wireProtocol.TendermintMessage{
 			ChainId: msg.ChainID,
-			Channel: msg.Channel,
-			Data:    msg.Data,
+			Channel: uint32(msg.Channel),
+			Packets: wirePackets,
 		}
+
+		// fmt.Println("\nmsg: ", msg, "\nwire: ", wirePackets, "\nsendData: ", sendData)
 
 		proto3Marshalled, err := proto.Marshal(sendData)
 		if err != nil {
@@ -89,7 +102,7 @@ func sendRoutine(marlinTo <-chan types.MarlinMessage) {
 			os.Exit(2)
 		}
 
-		log.Debug("Marlin <- Connector transferred stat: ", len(msg.Data), "/", n, "/", len(encodedData), " ", encodedData)
+		log.Debug("Marlin <- Connector transferred stat: ", len(encodedData), " ", encodedData)
 	}
 }
 
@@ -119,10 +132,18 @@ func recvRoutine(marlinFrom chan<- types.MarlinMessage) {
 		log.Debug("Marlin -> Connector recieved message: ", buffer, " ", tmMessage)
 
 		if tmMessage.GetChainId() == currentlyServicing && messageLen > 0 {
+			internalPackets := []types.PacketMsg{}
+			for _, pkt := range tmMessage.GetPackets() {
+				internalPackets = append(internalPackets, types.PacketMsg{
+															ChannelID: tmMessage.GetChannel(),
+															EOF:	pkt.GetEof(),
+															Bytes:	pkt.GetDataBytes(),
+														})
+			}
 			marlinFrom <- types.MarlinMessage{
 				ChainID: tmMessage.GetChainId(),
-				Channel: tmMessage.GetChannel(),
-				Data:    tmMessage.GetData(),
+				Channel: byte(tmMessage.GetChannel()),
+				Packets: internalPackets,
 			}
 		}
 	}

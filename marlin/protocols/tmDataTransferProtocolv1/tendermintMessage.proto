@@ -1,8 +1,13 @@
 syntax = "proto3";
 package tmDataTransferProtocol;
 
+message PacketMsg {
+    uint32 eof = 2;
+    bytes dataBytes = 3;
+}
+
 message TendermintMessage {
     uint32 chainId = 1;
     uint32 channel = 2;
-    bytes  data = 3;
+    repeated PacketMsg packets = 3;
 }
