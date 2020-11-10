@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/mgutz/ansi"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
@@ -277,7 +277,7 @@ func (f *TextFormatter) printColored(b *bytes.Buffer, entry *logrus.Entry, keys 
 		} else {
 			timestamp = fmt.Sprintf("%s", entry.Time.Format(timestampFormat))
 		}
-		fmt.Fprintf(b, "%s:%s -%s "+messageFormat, "[" + level + "]", colorScheme.TimestampColor(timestamp), prefix, message)
+		fmt.Fprintf(b, "%s:%s -%s "+messageFormat, "["+level+"]", colorScheme.TimestampColor(timestamp), prefix, message)
 	}
 	for _, k := range keys {
 		if k != "prefix" {

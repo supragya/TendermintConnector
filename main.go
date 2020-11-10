@@ -16,17 +16,17 @@ limitations under the License.
 package main
 
 import (
-	"github.com/supragya/tendermint_connector/cmd"
 	log "github.com/sirupsen/logrus"
+	"github.com/supragya/tendermint_connector/cmd"
 )
 
 func main() {
 	log.SetReportCaller(true)
 	log.SetFormatter(&TextFormatter{
-		ForceColors: true,
-		DisableColors: false,
-		TimestampFormat : "2006-01-02 15:04:05",
-		FullTimestamp:true,
+		ForceColors:     true,
+		DisableColors:   false,
+		TimestampFormat: "2006-01-02 15:04:05",
+		FullTimestamp:   true,
 	})
 	cmd.Execute()
 }

@@ -21,7 +21,8 @@ import (
 )
 
 var peerPort, rpcPort, marlinPort int
-var serverAddr string
+var peerIP, marlinIP string
+var isConnectionOutgoing bool
 
 // connectCmd represents the connect command
 var connectCmd = &cobra.Command{
@@ -29,14 +30,16 @@ var connectCmd = &cobra.Command{
 	Short: "Connect to a TM Core",
 	Long:  `Connect to a TM Core`,
 	Run: func(cmd *cobra.Command, args []string) {
-		connector.Connect(peerPort, rpcPort, marlinPort, serverAddr)
+		connector.Connect(peerIP, peerPort, rpcPort, marlinIP, marlinPort, isConnectionOutgoing)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(connectCmd)
-	connectCmd.Flags().IntVarP(&peerPort, "peer_port", "p", 26656, "Tendermint Core peer port")
-	connectCmd.Flags().IntVarP(&rpcPort, "rpc_port", "r", 26657, "Tendermint Core rpc port")
-	connectCmd.Flags().IntVarP(&marlinPort, "marlin_port", "m", 15003, "Marlin multicastTCPBridge port")
-	connectCmd.Flags().StringVarP(&serverAddr, "server_address", "s", "127.0.0.1", "Tendermint Core IP address / MarlinTCPBridge IP address")
+	connectCmd.Flags().StringVarP(&peerIP, "peerip", "p", "127.0.0.1", "Tendermint Core IP address")
+	connectCmd.Flags().IntVarP(&peerPort, "connectport", "c", 26656, "Tendermint Core peer connection port")
+	connectCmd.Flags().IntVarP(&rpcPort, "rpcport", "r", 26657, "Tendermint Core rpc port")
+	connectCmd.Flags().StringVarP(&marlinIP, "marlinip", "m", "127.0.0.1", "Marlin TCP Bridge IP address")
+	connectCmd.Flags().IntVarP(&marlinPort, "marlinport", "n", 15003, "Marlin TCP Bridge IP port")
+	connectCmd.Flags().BoolVarP(&isConnectionOutgoing, "dial", "d", false, "Connector dials TMCore if flag is set, otherwise connector listens for connections")
 }

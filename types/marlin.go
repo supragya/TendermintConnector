@@ -1,9 +1,9 @@
 package types
 
 type MarlinMessage struct {
-	ChainID	uint32
+	ChainID uint32
 	Channel uint32
-	Data 	[]byte
+	Data    []byte
 }
 
 // DANGER - Do not change mappings for serviced chains.
