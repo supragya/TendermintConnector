@@ -7,7 +7,7 @@ import (
 	"os"
 	// "fmt"
 	// "io/ioutil"
-	// "time"
+	"time"
 	"encoding/binary"
 
 	proto "github.com/golang/protobuf/proto"
@@ -19,9 +19,8 @@ import (
 	wireProtocol "github.com/supragya/tendermint_connector/marlin/protocols/tmDataTransferProtocolv1"
 )
 
-var currentlyServicing uint32 = 0
-var marlinConn *bufio.ReadWriter
 
+var currentlyServicing 	uint32
 // ALlowServicedChainMessages allows handlers to register a single chain
 // to allow through marlin side connector. Initially there is no blockchain message
 // allowed to passthrough. One can register the chainId to look for in messages
@@ -30,29 +29,103 @@ func AllowServicedChainMessages(servicedChainId uint32) {
 	currentlyServicing = servicedChainId
 }
 
+type MarlinHandler struct {
+	marlinConn			*bufio.ReadWriter
+	marlinAddr			string
+	marlinTo			chan types.MarlinMessage
+	marlinFrom			chan types.MarlinMessage
+	signalConnError		chan struct{}
+	signalShutSend		chan struct{}
+	signalShutRecv		chan struct{}
+}
+
 // Run acts as the entry point to marlin side connection logic.
 // Marlin Side Connector requires two channels for sending / recieving messages
 // from peer side connector.
-func Run(marlinAddr string, marlinTo <-chan types.MarlinMessage, marlinFrom chan<- types.MarlinMessage) {
-	conn, err := net.Dial("tcp", marlinAddr)
-	if err != nil {
-		log.Error("Unable to connect to Marlin multicast TCP bridge at ", marlinAddr, ". Closing application")
-		os.Exit(2)
+func Run(marlinAddr string, marlinTo chan types.MarlinMessage, marlinFrom chan types.MarlinMessage) {
+	log.Info("Starting Marlin TCP Bridge Handler")
+
+	for {
+		handler, err := createMarlinHandler(marlinAddr, marlinTo, marlinFrom)
+
+		if err != nil {
+			log.Error("Error encountered while creating Marlin Handler: ", err)
+			os.Exit(1)
+		}
+
+		err = handler.dialTCPBridge()
+		if err != nil {
+			log.Error("Connection establishment with Marlin TCP Bridge unsuccessful: ", err)
+			goto REATTEMPT_CONNECTION
+		}
+
+		handler.beginServicing()
+
+		select {
+		case <- handler.signalConnError:
+			handler.signalShutSend<- struct{}{}
+			handler.signalShutRecv<- struct{}{}
+			goto REATTEMPT_CONNECTION			
+		}
+
+		REATTEMPT_CONNECTION:
+		log.Info("Error encountered with connection to the Marlin TCP Bridge. Attempting reconnect post 1 second.")
+		time.Sleep(1 * time.Second)
 	}
+	// conn, err := net.Dial("tcp", marlinAddr)
+	// if err != nil {
+	// 	log.Error("Unable to connect to Marlin multicast TCP bridge at ", marlinAddr, ". Closing application")
+	// 	os.Exit(2)
+	// }
 
-	marlinConn = bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
+	// marlinConn = bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 
-	go sendRoutine(marlinTo)
-	go recvRoutine(marlinFrom)
+	// go sendRoutine(marlinTo)
+	// go recvRoutine(marlinFrom)
+}
+
+func createMarlinHandler(marlinAddr string, 
+			marlinTo chan types.MarlinMessage, 
+			marlinFrom chan types.MarlinMessage) (MarlinHandler, error) {
+	return MarlinHandler{
+		marlinAddr:	marlinAddr,
+		marlinTo: marlinTo,
+		marlinFrom:	marlinFrom,
+		signalConnError:	 make(chan struct{}, 1),
+		signalShutSend:		 make(chan struct{}, 1),
+		signalShutRecv:		 make(chan struct{}, 1),
+	}, nil
+}
+
+func (h *MarlinHandler) dialTCPBridge() error {
+	conn, err := net.DialTimeout("tcp", h.marlinAddr, 2000 * time.Millisecond)
+	if err != nil {
+		return err
+	}
+	h.marlinConn = bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
+	return nil
+}
+
+func (h *MarlinHandler) beginServicing() {
+	go h.sendRoutine()
+	go h.recvRoutine()
 }
 
 // sendRoutine is the routine that reads data from peer side connector and makes it available to marlin relay
 // Messages on wire are encoded with Marlin Tendermint Data Transfer Protocol v1 prepended with length of message
 // Messages from peer connector on channel is defined using types.marlinMessage
-func sendRoutine(marlinTo <-chan types.MarlinMessage) {
+func (h *MarlinHandler) sendRoutine() {
 	log.Info("Marlin <- Connector Routine started")
 
-	for msg := range marlinTo {
+	for msg := range h.marlinTo {
+		select {
+		case <-h.signalShutSend:
+			h.marlinTo <- msg
+			log.Info("Marlin <- Connector Routine shutdown")
+			return 
+		default:
+		}
+
 		if msg.ChainID != currentlyServicing {
 			log.Error("Marlin <- Connector Discarding message to marlin relay, chain is not allowed. Chain ID: ", msg.ChainID)
 			continue
@@ -78,26 +151,30 @@ func sendRoutine(marlinTo <-chan types.MarlinMessage) {
 		proto3Marshalled, err := proto.Marshal(sendData)
 		if err != nil {
 			log.Error("Marlin <- Connector Error encountered while marshalling sendData.")
-			continue
+			h.signalConnError <- struct{}{}
+			return
 		}
 
 		binary.LittleEndian.PutUint16(messageLen, uint16(len(proto3Marshalled)))
 
 		encodedData := append(messageLen, proto3Marshalled...)
 
-		n, err := marlinConn.Write(encodedData)
+		n, err := h.marlinConn.Write(encodedData)
 		if err != nil {
 			log.Error("Marlin <- Connector Error encountered when writing to marlin TCP Bridge: ", err)
-			os.Exit(2)
+			h.signalConnError <- struct{}{}
+			return
 		} else if n < len(encodedData) {
 			log.Error("Marlin <- Connector Too few data pushed to marlin TCP Bridge: ", n, " vs ", len(encodedData))
-			os.Exit(2)
+			h.signalConnError <- struct{}{}
+			return
 		}
 
-		err = marlinConn.Flush()
+		err = h.marlinConn.Flush()
 		if err != nil {
 			log.Error("Marlin <- Connector Error flushing marlinWriter buffer, err: ", err)
-			os.Exit(2)
+			h.signalConnError <- struct{}{}
+			return
 		}
 
 		log.Debug("Marlin <- Connector transferred stat: ", len(encodedData), " ", encodedData)
@@ -107,22 +184,32 @@ func sendRoutine(marlinTo <-chan types.MarlinMessage) {
 // recvRoutine is the routine that read data from marlin relay and makes it available to peer side connector.
 // Messages on wire are encoded with Marlin Tendermint Data Transfer Protocol v1 prepended with length of message
 // Messages pushed to peer connector on channel is defined using types.marlinMessage
-func recvRoutine(marlinFrom chan<- types.MarlinMessage) {
+func (h *MarlinHandler) recvRoutine() {
 	log.Info("Marlin -> Connector Routine started")
 	for {
-		messageLenByte0, err1 := marlinConn.ReadByte()
-		messageLenByte1, err2 := marlinConn.ReadByte()
+		select {
+		case <-h.signalShutRecv:
+			log.Info("Marlin -> Connector Routine shutdown")
+			return 
+		default:
+		}
+		messageLenByte0, err1 := h.marlinConn.ReadByte()
+		messageLenByte1, err2 := h.marlinConn.ReadByte()
 
 		if err1 != nil || err2 != nil {
 			log.Error("Marlin -> Connector Error reading message size from the buffer")
+			h.signalConnError <- struct{}{}
+			return
 		}
 
 		messageLen := binary.LittleEndian.Uint16([]byte{messageLenByte0, messageLenByte1})
 
 		var buffer = make([]byte, messageLen)
-		n, err := io.ReadFull(marlinConn, buffer)
+		n, err := io.ReadFull(h.marlinConn, buffer)
 		if err != nil {
 			log.Error("Marlin -> Connector Error reading message of size ", messageLen, " instead read ", n)
+			h.signalConnError <- struct{}{}
+			return
 		}
 
 		tmMessage := wireProtocol.TendermintMessage{}
@@ -138,7 +225,7 @@ func recvRoutine(marlinFrom chan<- types.MarlinMessage) {
 															Bytes:	pkt.GetDataBytes(),
 														})
 			}
-			marlinFrom <- types.MarlinMessage{
+			h.marlinFrom <- types.MarlinMessage{
 				ChainID: tmMessage.GetChainId(),
 				Channel: byte(tmMessage.GetChannel()),
 				Packets: internalPackets,

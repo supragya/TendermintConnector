@@ -124,9 +124,9 @@ func createTMHandler(peerAddr string,
 
 func (h *TendermintHandler) dialPeer() error {
 	var err error
-	h.baseConnection, err = net.DialTimeout("tcp", h.peerAddr, 200 * time.Millisecond)
+	h.baseConnection, err = net.DialTimeout("tcp", h.peerAddr, 2000 * time.Millisecond)
 	if err != nil {
-		return errors.New("Error opening TCP connection to " + h.peerAddr)
+		return err
 	}
 
 	return nil
