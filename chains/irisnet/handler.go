@@ -297,17 +297,37 @@ func (h *TendermintHandler) sendRoutine() {
 		case msg := <-h.marlinFrom:  // Actual message packets from Marlin Relay (encoded in Marlin Tendermint Data Transfer Protocol v1)
 			switch msg.Channel {
 			case channelCsSt:
+				var sendAhead = true
 
+				// Unmarshalling Test
 				for _, pkt := range msg.Packets {
-					// TODO add checks
-					_ = pkt
-					// _, err := h.codec.MarshalBinaryLengthPrefixedWriter(
-					// 	h.p2pConnection.bufConnWriter, 
-					// 	pkt)
-					// if err != nil {
-					// 	log.Error("Error occurred in sending data to TMCore: ", err)
-					// 	h.signalConnError <- struct{}{}
-					// }
+					var cmsg ConsensusMessage
+					err := h.codec.UnmarshalBinaryBare(pkt.Bytes, &cmsg)
+					if err != nil {
+						sendAhead = false
+					}
+				}
+				
+				if sendAhead {
+					for _, pkt := range msg.Packets {
+						_n, err := h.codec.MarshalBinaryLengthPrefixedWriter(
+							h.p2pConnection.bufConnWriter, 
+							PacketMsg{
+								ChannelID: byte(pkt.ChannelID),
+								EOF: byte(pkt.EOF),
+								Bytes: pkt.Bytes,
+							})
+						if err != nil {
+							log.Error("Error occurred in sending data to TMCore: ", err)
+							h.signalConnError <- struct{}{}
+						}
+						h.p2pConnection.sendMonitor.Update(int(_n))
+						err = h.p2pConnection.bufConnWriter.Flush()
+						if err != nil {
+							log.Error("Cannot flush buffer: ", err)
+							h.signalConnError <- struct{}{}
+						}
+					}
 				}
 			default:
 				log.Error("node <- connector Not servicing undecipherable channel ", msg.Channel)
