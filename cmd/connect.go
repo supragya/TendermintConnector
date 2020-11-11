@@ -34,7 +34,7 @@ import (
 
 )
 
-var peerPort, rpcPort, marlinPort int
+var peerPort, rpcPort, marlinPort, listenPort int
 var peerIP, marlinIP, keyFile string
 var isConnectionOutgoing bool
 
@@ -54,9 +54,10 @@ func init() {
 	connectCmd.Flags().IntVarP(&peerPort, "connectport", "c", 26656, "Tendermint Core peer connection port")
 	connectCmd.Flags().IntVarP(&rpcPort, "rpcport", "r", 26657, "Tendermint Core rpc port")
 	connectCmd.Flags().StringVarP(&keyFile, "keyfile", "k", "", "KeyFile that Connector should use to connect to peer. If set, keypair in KeyFile will be used for all connections, else new KeyPair is generated on the fly.")
-	connectCmd.Flags().BoolVarP(&isConnectionOutgoing, "dial", "d", false, "Connector dials TMCore if flag is set, otherwise connector listens for connections")
+	connectCmd.Flags().BoolVarP(&isConnectionOutgoing, "dial", "d", false, "Connector DIALs TMCore if flag is set, otherwise connector LISTENs for connections")
 	connectCmd.Flags().StringVarP(&marlinIP, "marlinip", "m", "127.0.0.1", "Marlin TCP Bridge IP address")
 	connectCmd.Flags().IntVarP(&marlinPort, "marlinport", "n", 15003, "Marlin TCP Bridge IP port")
+	connectCmd.Flags().IntVarP(&listenPort, "listenport", "l", 59001, "Port on which Connector should listen for incoming connections from peer. Only applicable for LISTEN mode.")
 }
 
 
@@ -101,13 +102,14 @@ func invokeHandler(node chains.NodeType,
 					marlinTo chan<- types.MarlinMessage, 
 					marlinFrom <-chan types.MarlinMessage,
 					isConnectionOutgoing bool,
-					keyFile string) {
+					keyFile string,
+					listenPort int) {
 	log.Info("Trying to match ", node, " to available tendermint core handlers")
 
 	switch node {
 	case irisnet.ServicedTMCore:
 		log.Info("Attaching Irisnet TM Handler to service given TM core")
-		irisnet.Run(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile)
+		irisnet.Run(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPort)
 	default:
 		log.Error("Cannot find any handler for ", node)
 		return
@@ -119,9 +121,10 @@ func connect() {
 	rpcAddr := fmt.Sprintf("%v:%v", peerIP, rpcPort)
 	marlinAddr := fmt.Sprintf("%v:%v", marlinIP, marlinPort)
 
-	if keyFile != "" {
-		log.Warning("TMCore connector is using a KeyFile to connect to TMCore peer." +
-					" This may lead to unsuccessful connections with peer if peer blacklists connector's ID." +
+	if keyFile != "" && isConnectionOutgoing {
+		log.Warning("TMCore connector is using a KeyFile to connect to TMCore peer in DIAL mode." +
+					" KeyFiles are useful to connect with peer in LISTEN mode in most use cases." + 
+					" Configuring KeyFile usage in DIAL mode may lead to unsuccessful connections if peer blacklists connector's ID." +
 					" It is advised that you let connector use anonymous identities if possible.")
 		time.Sleep(5 * time.Second) // Sleep so that warning message is clearly read
 	}
@@ -146,5 +149,5 @@ func connect() {
 
 	marlin.Run(marlinAddr, marlinTo, marlinFrom)
 
-	invokeHandler(nodeInfo["nodeType"].(chains.NodeType), peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile)
+	invokeHandler(nodeInfo["nodeType"].(chains.NodeType), peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPort)
 }

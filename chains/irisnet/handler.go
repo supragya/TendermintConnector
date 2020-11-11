@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"sync"
 	"time"
+	"strconv"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/supragya/tendermint_connector/chains"
@@ -30,22 +31,22 @@ import (
 // to decipher which handler is to be attached.
 var ServicedTMCore chains.NodeType = chains.NodeType{Version: "0.32.2", Network: "irishub", ProtocolVersionApp: "2", ProtocolVersionBlock: "9", ProtocolVersionP2p: "5"}
 
-
 // Run serves as the entry point for a TM Core handler when serving as a connector
 func Run(peerAddr string, 
 		marlinTo chan<- marlinTypes.MarlinMessage, 
 		marlinFrom <-chan marlinTypes.MarlinMessage,
 		isConnectionOutgoing bool,
-		keyFile string) {
+		keyFile string,
+		listenPort int) {
 	log.Info("Starting Irisnet Tendermint Core Handler - 0.16.3-d83fc038-2-mainnet")
 
 	if keyFile != "" {
-		
-		// Load KeyFile here
+		isKeyFileUsed = true
+		keyFileLocation = keyFile
 	}
 
 	for {
-		handler, err := createTMHandler(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing)
+		handler, err := createTMHandler(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, listenPort)
 
 		if err != nil {
 			log.Error("Error encountered while creating TM Handler: ", err)
@@ -90,16 +91,18 @@ func Run(peerAddr string,
 func createTMHandler(peerAddr string, 
 		marlinTo chan<- marlinTypes.MarlinMessage, 
 		marlinFrom <-chan marlinTypes.MarlinMessage,
-		isConnectionOutgoing bool) (TendermintHandler, error) {
+		isConnectionOutgoing bool,
+		listenPort int) (TendermintHandler, error) {
 	chainId, ok := marlinTypes.ServicedChains["irisnet-0.16.3-mainnet"]
 	if !ok {
 		return TendermintHandler{}, errors.New("Cannot find irisnet-0.16.3-mainnet in list of serviced chains by marlin connector")
 	}
 
-	privateKey := ed25519.GenPrivKey()
+	privateKey := getPrivateKey()
 
 	return TendermintHandler{
 			servicedChainId: 		chainId,
+			listenPort:				listenPort,
 			isConnectionOutgoing: 	isConnectionOutgoing,
 			peerAddr:				peerAddr,
 			privateKey: 			privateKey,
@@ -127,7 +130,19 @@ func (h *TendermintHandler) dialPeer() error {
 }
 
 func (h *TendermintHandler) acceptPeer() error {
-	// TODO
+	log.Info("Listening for dials to ", 
+			string(hex.EncodeToString(h.privateKey.PubKey().Address())), "@<SYSTEM-IP-ADDR>:", h.listenPort)
+	
+	listener, err := net.Listen("tcp", "0.0.0.0:"+strconv.Itoa(h.listenPort))
+	if err != nil {
+		return err
+	}
+
+	h.baseConnection, err = listener.Accept()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -285,13 +300,14 @@ func (h *TendermintHandler) sendRoutine() {
 
 				for _, pkt := range msg.Packets {
 					// TODO add checks
-					_, err := h.codec.MarshalBinaryLengthPrefixedWriter(
-						h.p2pConnection.bufConnWriter, 
-						pkt)
-					if err != nil {
-						log.Error("Error occurred in sending data to TMCore: ", err)
-						h.signalConnError <- struct{}{}
-					}
+					_ = pkt
+					// _, err := h.codec.MarshalBinaryLengthPrefixedWriter(
+					// 	h.p2pConnection.bufConnWriter, 
+					// 	pkt)
+					// if err != nil {
+					// 	log.Error("Error occurred in sending data to TMCore: ", err)
+					// 	h.signalConnError <- struct{}{}
+					// }
 				}
 			default:
 				log.Error("node <- connector Not servicing undecipherable channel ", msg.Channel)
@@ -470,6 +486,7 @@ func (t *throughPutData) presentThroughput(sec time.Duration, shutdownCh chan st
 
 type TendermintHandler struct {
 	servicedChainId			uint32
+	listenPort				int
 	isConnectionOutgoing	bool
 	peerAddr				string
 	privateKey				ed25519.PrivKeyEd25519

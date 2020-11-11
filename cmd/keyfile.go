@@ -51,6 +51,6 @@ func init() {
 	rootCmd.AddCommand(keyFileCmd)
 	keyFileCmd.Flags().StringVarP(&chain, "chain", "c", "", "Tendermint based chain for which to generate KeyFile")
 	keyFileCmd.Flags().StringVarP(&fileLocation, "filelocation", "f", "", "File to generate/validate")
-	keyFileCmd.Flags().BoolVarP(&isGenerate, "generate", "g", true, "Generate new file. If not set, validate given KeyFile")
+	keyFileCmd.Flags().BoolVarP(&isGenerate, "generate", "g", false, "Generate new file. If not set, validate given KeyFile")
 }
 
