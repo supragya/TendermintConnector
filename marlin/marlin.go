@@ -75,8 +75,6 @@ func sendRoutine(marlinTo <-chan types.MarlinMessage) {
 			Packets: wirePackets,
 		}
 
-		// fmt.Println("\nmsg: ", msg, "\nwire: ", wirePackets, "\nsendData: ", sendData)
-
 		proto3Marshalled, err := proto.Marshal(sendData)
 		if err != nil {
 			log.Error("Marlin <- Connector Error encountered while marshalling sendData.")

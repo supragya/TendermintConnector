@@ -111,7 +111,10 @@ func createTMHandler(peerAddr string,
 			marlinTo:				marlinTo,
 			marlinFrom: 			marlinFrom,
 			channelBuffer:			make(map[byte][]marlinTypes.PacketMsg),
-			throughput: 			throughPutData{},
+			throughput: 			throughPutData{
+										toTMCore: make(map[string]uint32),
+										fromTMCore: make(map[string]uint32),
+									},
 			signalConnError: 		make(chan struct{}, 1),
 			signalShutSend:			make(chan struct{}, 1),
 			signalShutRecv: 		make(chan struct{}, 1),
@@ -328,6 +331,10 @@ func (h *TendermintHandler) sendRoutine() {
 							h.signalConnError <- struct{}{}
 						}
 					}
+					h.throughput.putInfo("to", "CsSt+", 1)
+				}
+				if !sendAhead {
+					h.throughput.putInfo("to", "CsSt-", uint32(len(msg.Packets)))
 				}
 			default:
 				log.Error("node <- connector Not servicing undecipherable channel ", msg.Channel)
@@ -421,6 +428,7 @@ func (h *TendermintHandler) recvRoutine() {
 
 					// h.throughput.putInfo("from", 1, 0, (message), 0)
 					h.marlinTo<- message
+					h.throughput.putInfo("from", "CsSt+", uint32(len(h.channelBuffer[channelCsSt])))
 					h.channelBuffer[channelCsSt] = h.channelBuffer[channelCsSt][:0]
 				}
 			case channelCsDC:
@@ -459,19 +467,13 @@ func (c *P2PConnection) stopPongTimer() {
 	}
 }
 
-func (t *throughPutData) putInfo(direction string, count int, fatalCount int, bytes int, fatalBytes int) {
+func (t *throughPutData) putInfo(direction string, key string, count uint32) {
 	t.mu.Lock()
 	switch direction {
 	case "to":
-		t.nodeToCount += count
-		t.nodeToFatalCount += fatalCount
-		t.nodeToBytes += bytes
-		t.nodeToFatalBytes += fatalBytes
+		t.toTMCore[key] = t.toTMCore[key] + count
 	case "from":
-		t.nodeFromCount += count
-		t.nodeFromFatalCount += fatalCount
-		t.nodeFromBytes += bytes
-		t.nodeFromFatalBytes += fatalBytes
+		t.fromTMCore[key] = t.fromTMCore[key] + count
 	}
 	t.mu.Unlock()
 }
@@ -486,18 +488,10 @@ func (t *throughPutData) presentThroughput(sec time.Duration, shutdownCh chan st
 		default:
 		}
 		t.mu.Lock()
-		// log.Info(fmt.Sprintf("Tfr stats [To TMCore]: (cnt: %6v, Fcnt: %6v, byt: %6v Fbyt: %6v); [From TMCore]: (cnt: %6v, Fcnt: %6v, byt: %6v Fbyt: %6v)",
-			// t.nodeToCount, t.nodeToFatalCount, t.nodeToBytes, t.nodeToFatalBytes,
-			// t.nodeFromCount, t.nodeFromFatalCount, t.nodeFromBytes, t.nodeFromFatalBytes))
+		log.Info(fmt.Sprintf("[Stats] To TMCore: %v; From TMCore: %v", t.toTMCore, t.fromTMCore))
 
-		t.nodeToCount = 0
-		t.nodeToFatalCount = 0
-		t.nodeToBytes = 0
-		t.nodeToFatalBytes = 0
-		t.nodeFromCount = 0
-		t.nodeFromFatalCount = 0
-		t.nodeFromBytes = 0
-		t.nodeFromFatalBytes = 0
+		t.toTMCore = make(map[string]uint32)
+		t.fromTMCore = make(map[string]uint32)
 		t.mu.Unlock()
 	}
 }
@@ -536,14 +530,8 @@ const (
 )
 
 type throughPutData struct {
-	nodeToCount        int
-	nodeToFatalCount   int
-	nodeToBytes        int
-	nodeToFatalBytes   int
-	nodeFromCount      int
-	nodeFromFatalCount int
-	nodeFromBytes      int
-	nodeFromFatalBytes int
+	toTMCore		   map[string]uint32
+	fromTMCore		   map[string]uint32
 	mu                 sync.Mutex
 }
 
