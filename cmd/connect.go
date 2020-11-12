@@ -99,8 +99,8 @@ func extractNodeInfo(rpcNodeStatus map[string]interface{}) map[string]interface{
 
 func invokeHandler(node chains.NodeType, 
 					peerAddr string, 
-					marlinTo chan<- types.MarlinMessage, 
-					marlinFrom <-chan types.MarlinMessage,
+					marlinTo chan types.MarlinMessage, 
+					marlinFrom chan types.MarlinMessage,
 					isConnectionOutgoing bool,
 					keyFile string,
 					listenPort int) {
@@ -123,7 +123,7 @@ func connect() {
 
 	if keyFile != "" && isConnectionOutgoing {
 		log.Warning("TMCore connector is using a KeyFile to connect to TMCore peer in DIAL mode." +
-					" KeyFiles are useful to connect with peer in LISTEN mode in most use cases." + 
+					" KeyFiles are useful to connect with peer in LISTEN mode in most use cases since peer would dial a specific peer which connector listens to." + 
 					" Configuring KeyFile usage in DIAL mode may lead to unsuccessful connections if peer blacklists connector's ID." +
 					" It is advised that you let connector use anonymous identities if possible.")
 		time.Sleep(5 * time.Second) // Sleep so that warning message is clearly read
@@ -147,7 +147,7 @@ func connect() {
 
 	nodeInfo := extractNodeInfo(nodeStatus)
 
-	marlin.Run(marlinAddr, marlinTo, marlinFrom)
+	go marlin.Run(marlinAddr, marlinTo, marlinFrom)
 
 	invokeHandler(nodeInfo["nodeType"].(chains.NodeType), peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPort)
 }

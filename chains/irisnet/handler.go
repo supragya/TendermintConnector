@@ -33,8 +33,8 @@ var ServicedTMCore chains.NodeType = chains.NodeType{Version: "0.32.2", Network:
 
 // Run serves as the entry point for a TM Core handler when serving as a connector
 func Run(peerAddr string, 
-		marlinTo chan<- marlinTypes.MarlinMessage, 
-		marlinFrom <-chan marlinTypes.MarlinMessage,
+		marlinTo chan marlinTypes.MarlinMessage, 
+		marlinFrom chan marlinTypes.MarlinMessage,
 		isConnectionOutgoing bool,
 		keyFile string,
 		listenPort int) {
@@ -89,8 +89,8 @@ func Run(peerAddr string,
 }
 
 func createTMHandler(peerAddr string, 
-		marlinTo chan<- marlinTypes.MarlinMessage, 
-		marlinFrom <-chan marlinTypes.MarlinMessage,
+		marlinTo chan marlinTypes.MarlinMessage, 
+		marlinFrom chan marlinTypes.MarlinMessage,
 		isConnectionOutgoing bool,
 		listenPort int) (TendermintHandler, error) {
 	chainId, ok := marlinTypes.ServicedChains["irisnet-0.16.3-mainnet"]
@@ -427,7 +427,13 @@ func (h *TendermintHandler) recvRoutine() {
 					}
 
 					// h.throughput.putInfo("from", 1, 0, (message), 0)
-					h.marlinTo<- message
+					select {
+					case h.marlinTo <- message:
+					default:
+						log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
+						_ = <-h.marlinTo
+						h.marlinTo <- message
+					}
 					h.throughput.putInfo("from", "CsSt+", uint32(len(h.channelBuffer[channelCsSt])))
 					h.channelBuffer[channelCsSt] = h.channelBuffer[channelCsSt][:0]
 				}
@@ -508,8 +514,8 @@ type TendermintHandler struct {
 	baseConnection			net.Conn
 	secretConnection		*conn.SecretConnection
 	peerState				int
-	marlinTo				chan<- marlinTypes.MarlinMessage
-	marlinFrom				<-chan marlinTypes.MarlinMessage
+	marlinTo				chan marlinTypes.MarlinMessage
+	marlinFrom				chan marlinTypes.MarlinMessage
 	channelBuffer			map[byte][]marlinTypes.PacketMsg
 	peerNodeInfo			DefaultNodeInfo
 	p2pConnection			P2PConnection
@@ -520,6 +526,7 @@ type TendermintHandler struct {
 	signalShutThroughput	chan struct{}
 }
 
+// TODO: Check if we even have use for this??
 const (
 	tmPeerStateNotConnected = iota
 	tmPeerStateBaseConnected

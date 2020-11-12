@@ -225,10 +225,17 @@ func (h *MarlinHandler) recvRoutine() {
 															Bytes:	pkt.GetDataBytes(),
 														})
 			}
-			h.marlinFrom <- types.MarlinMessage{
+			message := types.MarlinMessage{
 				ChainID: tmMessage.GetChainId(),
 				Channel: byte(tmMessage.GetChannel()),
 				Packets: internalPackets,
+			}
+			select {
+			case h.marlinFrom <- message:
+			default:
+				log.Warning("Too many messages in channel marlinFrom. Dropping oldest messags")
+				_ = <-h.marlinFrom
+				h.marlinFrom <- message
 			}
 		}
 	}
