@@ -16,13 +16,12 @@ limitations under the License.
 package cmd
 
 import (
-	"github.com/spf13/cobra"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 
 	// Tendermint Core Chains
 	// "github.com/supragya/tendermint_connector/chains"
 	"github.com/supragya/tendermint_connector/chains/irisnet"
-
 )
 
 var chain, fileLocation string
@@ -53,4 +52,3 @@ func init() {
 	keyFileCmd.Flags().StringVarP(&fileLocation, "filelocation", "f", "", "File to generate/validate")
 	keyFileCmd.Flags().BoolVarP(&isGenerate, "generate", "g", false, "Generate new file. If not set, validate given KeyFile")
 }
-

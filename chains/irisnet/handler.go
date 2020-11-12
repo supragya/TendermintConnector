@@ -9,9 +9,9 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"strconv"
 	"sync"
 	"time"
-	"strconv"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/supragya/tendermint_connector/chains"
@@ -32,12 +32,12 @@ import (
 var ServicedTMCore chains.NodeType = chains.NodeType{Version: "0.32.2", Network: "irishub", ProtocolVersionApp: "2", ProtocolVersionBlock: "9", ProtocolVersionP2p: "5"}
 
 // Run serves as the entry point for a TM Core handler when serving as a connector
-func Run(peerAddr string, 
-		marlinTo chan marlinTypes.MarlinMessage, 
-		marlinFrom chan marlinTypes.MarlinMessage,
-		isConnectionOutgoing bool,
-		keyFile string,
-		listenPort int) {
+func Run(peerAddr string,
+	marlinTo chan marlinTypes.MarlinMessage,
+	marlinFrom chan marlinTypes.MarlinMessage,
+	isConnectionOutgoing bool,
+	keyFile string,
+	listenPort int) {
 	log.Info("Starting Irisnet Tendermint Core Handler - 0.16.3-d83fc038-2-mainnet")
 
 	if keyFile != "" {
@@ -74,25 +74,25 @@ func Run(peerAddr string,
 		handler.beginServicing()
 
 		select {
-		case <- handler.signalConnError:
-			handler.signalShutSend<- struct{}{}
-			handler.signalShutRecv<- struct{}{}
-			handler.signalShutThroughput<- struct{}{}
+		case <-handler.signalConnError:
+			handler.signalShutSend <- struct{}{}
+			handler.signalShutRecv <- struct{}{}
+			handler.signalShutThroughput <- struct{}{}
 			handler.peerState = tmPeerStateShutdown
 			goto REATTEMPT_CONNECTION
 		}
 
-		REATTEMPT_CONNECTION:
+	REATTEMPT_CONNECTION:
 		log.Info("Error encountered with connection to the peer. Attempting reconnect post 1 second.")
 		time.Sleep(1 * time.Second)
 	}
 }
 
-func createTMHandler(peerAddr string, 
-		marlinTo chan marlinTypes.MarlinMessage, 
-		marlinFrom chan marlinTypes.MarlinMessage,
-		isConnectionOutgoing bool,
-		listenPort int) (TendermintHandler, error) {
+func createTMHandler(peerAddr string,
+	marlinTo chan marlinTypes.MarlinMessage,
+	marlinFrom chan marlinTypes.MarlinMessage,
+	isConnectionOutgoing bool,
+	listenPort int) (TendermintHandler, error) {
 	chainId, ok := marlinTypes.ServicedChains["irisnet-0.16.3-mainnet"]
 	if !ok {
 		return TendermintHandler{}, errors.New("Cannot find irisnet-0.16.3-mainnet in list of serviced chains by marlin connector")
@@ -101,30 +101,30 @@ func createTMHandler(peerAddr string,
 	privateKey := getPrivateKey()
 
 	return TendermintHandler{
-			servicedChainId: 		chainId,
-			listenPort:				listenPort,
-			isConnectionOutgoing: 	isConnectionOutgoing,
-			peerAddr:				peerAddr,
-			privateKey: 			privateKey,
-			codec:					amino.NewCodec(),
-			peerState: 				tmPeerStateNotConnected,
-			marlinTo:				marlinTo,
-			marlinFrom: 			marlinFrom,
-			channelBuffer:			make(map[byte][]marlinTypes.PacketMsg),
-			throughput: 			throughPutData{
-										toTMCore: make(map[string]uint32),
-										fromTMCore: make(map[string]uint32),
-									},
-			signalConnError: 		make(chan struct{}, 1),
-			signalShutSend:			make(chan struct{}, 1),
-			signalShutRecv: 		make(chan struct{}, 1),
-			signalShutThroughput:   make(chan struct{}, 1),
-		}, nil
+		servicedChainId:      chainId,
+		listenPort:           listenPort,
+		isConnectionOutgoing: isConnectionOutgoing,
+		peerAddr:             peerAddr,
+		privateKey:           privateKey,
+		codec:                amino.NewCodec(),
+		peerState:            tmPeerStateNotConnected,
+		marlinTo:             marlinTo,
+		marlinFrom:           marlinFrom,
+		channelBuffer:        make(map[byte][]marlinTypes.PacketMsg),
+		throughput: throughPutData{
+			toTMCore:   make(map[string]uint32),
+			fromTMCore: make(map[string]uint32),
+		},
+		signalConnError:      make(chan struct{}, 1),
+		signalShutSend:       make(chan struct{}, 1),
+		signalShutRecv:       make(chan struct{}, 1),
+		signalShutThroughput: make(chan struct{}, 1),
+	}, nil
 }
 
 func (h *TendermintHandler) dialPeer() error {
 	var err error
-	h.baseConnection, err = net.DialTimeout("tcp", h.peerAddr, 2000 * time.Millisecond)
+	h.baseConnection, err = net.DialTimeout("tcp", h.peerAddr, 2000*time.Millisecond)
 	if err != nil {
 		return err
 	}
@@ -133,9 +133,9 @@ func (h *TendermintHandler) dialPeer() error {
 }
 
 func (h *TendermintHandler) acceptPeer() error {
-	log.Info("Listening for dials to ", 
-			string(hex.EncodeToString(h.privateKey.PubKey().Address())), "@<SYSTEM-IP-ADDR>:", h.listenPort)
-	
+	log.Info("Listening for dials to ",
+		string(hex.EncodeToString(h.privateKey.PubKey().Address())), "@<SYSTEM-IP-ADDR>:", h.listenPort)
+
 	listener, err := net.Listen("tcp", "0.0.0.0:"+strconv.Itoa(h.listenPort))
 	if err != nil {
 		return err
@@ -161,23 +161,23 @@ func (h *TendermintHandler) upgradeConnectionAndHandshake() error {
 		return err
 	}
 
-	log.Info("Established connection with " + 
-			string(hex.EncodeToString(h.secretConnection.RemotePubKey().Address())) +  "@" + h.peerAddr + 
-			" a.k.a. " + h.peerNodeInfo.Moniker)
+	log.Info("Established connection with " +
+		string(hex.EncodeToString(h.secretConnection.RemotePubKey().Address())) + "@" + h.peerAddr +
+		" a.k.a. " + h.peerNodeInfo.Moniker)
 	return nil
 }
 
 func (h *TendermintHandler) handshake() error {
 	var (
-		errc         = make(chan error, 2)
-		ourNodeInfo  DefaultNodeInfo = DefaultNodeInfo{
+		errc                        = make(chan error, 2)
+		ourNodeInfo DefaultNodeInfo = DefaultNodeInfo{
 			ProtocolVersion{App: 2, Block: 9, P2P: 5},
 			string(hex.EncodeToString(h.privateKey.PubKey().Address())),
 			"tcp://127.0.0.1:20006", //TODO Correct this
 			"irishub",
 			"0.32.2",
-			[]byte{	channelBc, channelCsSt, channelCsDC, channelCsVo,
-					channelCsVs, channelMm, channelEv},
+			[]byte{channelBc, channelCsSt, channelCsDC, channelCsVo,
+				channelCsVs, channelMm, channelEv},
 			"marlin-tendermint-connector",
 			DefaultNodeInfoOther{"on", "tcp://0.0.0.0:26667"}, // TODO: Correct this
 		}
@@ -248,9 +248,9 @@ func (h *TendermintHandler) sendRoutine() {
 	log.Info("TMCore <- Connector Routine Started")
 
 	for {
-		SELECTION:
+	SELECTION:
 		select {
-		case <- h.p2pConnection.pingTimer.C: // Send PING messages to TMCore
+		case <-h.p2pConnection.pingTimer.C: // Send PING messages to TMCore
 			_n, err := h.codec.MarshalBinaryLengthPrefixedWriter(h.p2pConnection.bufConnWriter, PacketPing{})
 			if err != nil {
 				break SELECTION
@@ -282,7 +282,7 @@ func (h *TendermintHandler) sendRoutine() {
 				h.signalConnError <- struct{}{}
 			}
 
-		case timeout := <-h.p2pConnection.pongTimeoutCh:  // Check if PONG messages are received in time
+		case timeout := <-h.p2pConnection.pongTimeoutCh: // Check if PONG messages are received in time
 			if timeout {
 				log.Error("Pong timeout, TM Core did not reply in time!")
 				h.p2pConnection.stopPongTimer()
@@ -297,7 +297,7 @@ func (h *TendermintHandler) sendRoutine() {
 			close(h.p2pConnection.doneSendRoutine)
 			return
 
-		case msg := <-h.marlinFrom:  // Actual message packets from Marlin Relay (encoded in Marlin Tendermint Data Transfer Protocol v1)
+		case msg := <-h.marlinFrom: // Actual message packets from Marlin Relay (encoded in Marlin Tendermint Data Transfer Protocol v1)
 			switch msg.Channel {
 			case channelCsSt:
 				var sendAhead = true
@@ -310,15 +310,15 @@ func (h *TendermintHandler) sendRoutine() {
 						sendAhead = false
 					}
 				}
-				
+
 				if sendAhead {
 					for _, pkt := range msg.Packets {
 						_n, err := h.codec.MarshalBinaryLengthPrefixedWriter(
-							h.p2pConnection.bufConnWriter, 
+							h.p2pConnection.bufConnWriter,
 							PacketMsg{
 								ChannelID: byte(pkt.ChannelID),
-								EOF: byte(pkt.EOF),
-								Bytes: pkt.Bytes,
+								EOF:       byte(pkt.EOF),
+								Bytes:     pkt.Bytes,
 							})
 						if err != nil {
 							log.Error("Error occurred in sending data to TMCore: ", err)
@@ -347,7 +347,7 @@ func (h *TendermintHandler) recvRoutine() {
 	log.Info("TMCore -> Connector Routine Started")
 	// var recvBuffer []byte
 
-	FOR_LOOP:
+FOR_LOOP:
 	for {
 		select {
 		case <-h.signalShutRecv:
@@ -358,26 +358,26 @@ func (h *TendermintHandler) recvRoutine() {
 		h.p2pConnection.recvMonitor.Limit(20000, 5120000, true)
 
 		/*
-		Peek into bufConnReader for debugging
+			Peek into bufConnReader for debugging
 
-		if numBytes := c.bufConnReader.Buffered(); numBytes > 0 {
-			bz, err := c.bufConnReader.Peek(cmn.MinInt(numBytes, 100))
-			if err == nil {
-				// return
-			} else {
-				log.Debug("Error peeking connection buffer ", "err ", err)
-				// return nil
+			if numBytes := c.bufConnReader.Buffered(); numBytes > 0 {
+				bz, err := c.bufConnReader.Peek(cmn.MinInt(numBytes, 100))
+				if err == nil {
+					// return
+				} else {
+					log.Debug("Error peeking connection buffer ", "err ", err)
+					// return nil
+				}
+				log.Info("Peek connection buffer ", "numBytes ", numBytes, " bz ", bz)
 			}
-			log.Info("Peek connection buffer ", "numBytes ", numBytes, " bz ", bz)
-		}
 		*/
 
 		// Read packet type
 		var packet Packet
 		_n, err := h.codec.UnmarshalBinaryLengthPrefixedReader(
-							h.p2pConnection.bufConnReader, 
-							&packet, 
-							int64(20000))
+			h.p2pConnection.bufConnReader,
+			&packet,
+			int64(20000))
 
 		h.p2pConnection.recvMonitor.Update(int(_n))
 
@@ -413,11 +413,11 @@ func (h *TendermintHandler) recvRoutine() {
 			case channelCsSt:
 
 				h.channelBuffer[channelCsSt] = append(h.channelBuffer[channelCsSt],
-												marlinTypes.PacketMsg{
-													ChannelID:	uint32(pkt.ChannelID),
-													EOF:		uint32(pkt.EOF),
-													Bytes:		pkt.Bytes,
-												})
+					marlinTypes.PacketMsg{
+						ChannelID: uint32(pkt.ChannelID),
+						EOF:       uint32(pkt.EOF),
+						Bytes:     pkt.Bytes,
+					})
 
 				if pkt.EOF == byte(0x01) {
 					message := marlinTypes.MarlinMessage{
@@ -505,25 +505,25 @@ func (t *throughPutData) presentThroughput(sec time.Duration, shutdownCh chan st
 // -------- STRUCTS -------
 
 type TendermintHandler struct {
-	servicedChainId			uint32
-	listenPort				int
-	isConnectionOutgoing	bool
-	peerAddr				string
-	privateKey				ed25519.PrivKeyEd25519
-	codec 					*amino.Codec
-	baseConnection			net.Conn
-	secretConnection		*conn.SecretConnection
-	peerState				int
-	marlinTo				chan marlinTypes.MarlinMessage
-	marlinFrom				chan marlinTypes.MarlinMessage
-	channelBuffer			map[byte][]marlinTypes.PacketMsg
-	peerNodeInfo			DefaultNodeInfo
-	p2pConnection			P2PConnection
-	throughput				throughPutData
-	signalConnError			chan struct{}
-	signalShutSend			chan struct{}
-	signalShutRecv			chan struct{}
-	signalShutThroughput	chan struct{}
+	servicedChainId      uint32
+	listenPort           int
+	isConnectionOutgoing bool
+	peerAddr             string
+	privateKey           ed25519.PrivKeyEd25519
+	codec                *amino.Codec
+	baseConnection       net.Conn
+	secretConnection     *conn.SecretConnection
+	peerState            int
+	marlinTo             chan marlinTypes.MarlinMessage
+	marlinFrom           chan marlinTypes.MarlinMessage
+	channelBuffer        map[byte][]marlinTypes.PacketMsg
+	peerNodeInfo         DefaultNodeInfo
+	p2pConnection        P2PConnection
+	throughput           throughPutData
+	signalConnError      chan struct{}
+	signalShutSend       chan struct{}
+	signalShutRecv       chan struct{}
+	signalShutThroughput chan struct{}
 }
 
 // TODO: Check if we even have use for this??
@@ -537,9 +537,9 @@ const (
 )
 
 type throughPutData struct {
-	toTMCore		   map[string]uint32
-	fromTMCore		   map[string]uint32
-	mu                 sync.Mutex
+	toTMCore   map[string]uint32
+	fromTMCore map[string]uint32
+	mu         sync.Mutex
 }
 
 type ProtocolVersion struct {

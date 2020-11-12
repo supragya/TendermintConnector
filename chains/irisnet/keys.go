@@ -1,10 +1,10 @@
 package irisnet
 
 import (
-	"os"
-	"io/ioutil"
-	"encoding/json"
 	"encoding/hex"
+	"encoding/json"
+	"io/ioutil"
+	"os"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/tendermint/tendermint/crypto/ed25519"
@@ -16,12 +16,12 @@ var keyFileLocation string
 var privateKey ed25519.PrivKeyEd25519
 
 type keyData struct {
-	Chain		string
-	IdString	string
-	PrivateKeyString	string
-	PublicKeyString		string
-	PrivateKey	[64]byte
-	PublicKey	[32]byte
+	Chain            string
+	IdString         string
+	PrivateKeyString string
+	PublicKeyString  string
+	PrivateKey       [64]byte
+	PublicKey        [32]byte
 }
 
 func GenerateKeyFile(fileLocation string) {
@@ -31,12 +31,12 @@ func GenerateKeyFile(fileLocation string) {
 	publicKey := privateKey.PubKey()
 
 	key := keyData{
-		Chain:		"irisnet-0.16.3-mainnet",
-		IdString: string(hex.EncodeToString(publicKey.Address())),
+		Chain:            "irisnet-0.16.3-mainnet",
+		IdString:         string(hex.EncodeToString(publicKey.Address())),
 		PrivateKeyString: string(hex.EncodeToString(privateKey[:])),
-		PublicKeyString: string(hex.EncodeToString(publicKey.Bytes())),
-		PrivateKey: privateKey,
-		PublicKey: publicKey.(ed25519.PubKeyEd25519),
+		PublicKeyString:  string(hex.EncodeToString(publicKey.Bytes())),
+		PrivateKey:       privateKey,
+		PublicKey:        publicKey.(ed25519.PubKeyEd25519),
 	}
 
 	log.Info("ID for node after generating KeyPair: ", key.IdString)
@@ -86,7 +86,7 @@ func getPrivateKey() ed25519.PrivKeyEd25519 {
 		return ed25519.GenPrivKey()
 	} else {
 		if !memoized {
-			valid, err:= VerifyKeyFile(keyFileLocation)
+			valid, err := VerifyKeyFile(keyFileLocation)
 			if err != nil {
 				log.Error("Error verifying keyfile integrity: ", keyFileLocation)
 				os.Exit(1)

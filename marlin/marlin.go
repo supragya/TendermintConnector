@@ -7,8 +7,8 @@ import (
 	"os"
 	// "fmt"
 	// "io/ioutil"
-	"time"
 	"encoding/binary"
+	"time"
 
 	proto "github.com/golang/protobuf/proto"
 	log "github.com/sirupsen/logrus"
@@ -19,8 +19,8 @@ import (
 	wireProtocol "github.com/supragya/tendermint_connector/marlin/protocols/tmDataTransferProtocolv1"
 )
 
+var currentlyServicing uint32
 
-var currentlyServicing 	uint32
 // ALlowServicedChainMessages allows handlers to register a single chain
 // to allow through marlin side connector. Initially there is no blockchain message
 // allowed to passthrough. One can register the chainId to look for in messages
@@ -30,13 +30,13 @@ func AllowServicedChainMessages(servicedChainId uint32) {
 }
 
 type MarlinHandler struct {
-	marlinConn			*bufio.ReadWriter
-	marlinAddr			string
-	marlinTo			chan types.MarlinMessage
-	marlinFrom			chan types.MarlinMessage
-	signalConnError		chan struct{}
-	signalShutSend		chan struct{}
-	signalShutRecv		chan struct{}
+	marlinConn      *bufio.ReadWriter
+	marlinAddr      string
+	marlinTo        chan types.MarlinMessage
+	marlinFrom      chan types.MarlinMessage
+	signalConnError chan struct{}
+	signalShutSend  chan struct{}
+	signalShutRecv  chan struct{}
 }
 
 // Run acts as the entry point to marlin side connection logic.
@@ -62,13 +62,13 @@ func Run(marlinAddr string, marlinTo chan types.MarlinMessage, marlinFrom chan t
 		handler.beginServicing()
 
 		select {
-		case <- handler.signalConnError:
-			handler.signalShutSend<- struct{}{}
-			handler.signalShutRecv<- struct{}{}
-			goto REATTEMPT_CONNECTION			
+		case <-handler.signalConnError:
+			handler.signalShutSend <- struct{}{}
+			handler.signalShutRecv <- struct{}{}
+			goto REATTEMPT_CONNECTION
 		}
 
-		REATTEMPT_CONNECTION:
+	REATTEMPT_CONNECTION:
 		log.Info("Error encountered with connection to the Marlin TCP Bridge. Attempting reconnect post 1 second.")
 		time.Sleep(1 * time.Second)
 	}
@@ -84,21 +84,21 @@ func Run(marlinAddr string, marlinTo chan types.MarlinMessage, marlinFrom chan t
 	// go recvRoutine(marlinFrom)
 }
 
-func createMarlinHandler(marlinAddr string, 
-			marlinTo chan types.MarlinMessage, 
-			marlinFrom chan types.MarlinMessage) (MarlinHandler, error) {
+func createMarlinHandler(marlinAddr string,
+	marlinTo chan types.MarlinMessage,
+	marlinFrom chan types.MarlinMessage) (MarlinHandler, error) {
 	return MarlinHandler{
-		marlinAddr:	marlinAddr,
-		marlinTo: marlinTo,
-		marlinFrom:	marlinFrom,
-		signalConnError:	 make(chan struct{}, 1),
-		signalShutSend:		 make(chan struct{}, 1),
-		signalShutRecv:		 make(chan struct{}, 1),
+		marlinAddr:      marlinAddr,
+		marlinTo:        marlinTo,
+		marlinFrom:      marlinFrom,
+		signalConnError: make(chan struct{}, 1),
+		signalShutSend:  make(chan struct{}, 1),
+		signalShutRecv:  make(chan struct{}, 1),
 	}, nil
 }
 
 func (h *MarlinHandler) dialTCPBridge() error {
-	conn, err := net.DialTimeout("tcp", h.marlinAddr, 2000 * time.Millisecond)
+	conn, err := net.DialTimeout("tcp", h.marlinAddr, 2000*time.Millisecond)
 	if err != nil {
 		return err
 	}
@@ -122,7 +122,7 @@ func (h *MarlinHandler) sendRoutine() {
 		case <-h.signalShutSend:
 			h.marlinTo <- msg
 			log.Info("Marlin <- Connector Routine shutdown")
-			return 
+			return
 		default:
 		}
 
@@ -137,9 +137,9 @@ func (h *MarlinHandler) sendRoutine() {
 		wirePackets := []*wireProtocol.PacketMsg{}
 		for _, pkt := range msg.Packets {
 			wirePackets = append(wirePackets, &wireProtocol.PacketMsg{
-												Eof:	   pkt.EOF,
-												DataBytes: pkt.Bytes,
-											})
+				Eof:       pkt.EOF,
+				DataBytes: pkt.Bytes,
+			})
 		}
 
 		sendData := &wireProtocol.TendermintMessage{
@@ -190,7 +190,7 @@ func (h *MarlinHandler) recvRoutine() {
 		select {
 		case <-h.signalShutRecv:
 			log.Info("Marlin -> Connector Routine shutdown")
-			return 
+			return
 		default:
 		}
 		messageLenByte0, err1 := h.marlinConn.ReadByte()
@@ -220,10 +220,10 @@ func (h *MarlinHandler) recvRoutine() {
 			internalPackets := []types.PacketMsg{}
 			for _, pkt := range tmMessage.GetPackets() {
 				internalPackets = append(internalPackets, types.PacketMsg{
-															ChannelID: tmMessage.GetChannel(),
-															EOF:	pkt.GetEof(),
-															Bytes:	pkt.GetDataBytes(),
-														})
+					ChannelID: tmMessage.GetChannel(),
+					EOF:       pkt.GetEof(),
+					Bytes:     pkt.GetDataBytes(),
+				})
 			}
 			message := types.MarlinMessage{
 				ChainID: tmMessage.GetChainId(),

@@ -22,8 +22,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/spf13/cobra"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 	"github.com/supragya/tendermint_connector/types"
 
 	"github.com/supragya/tendermint_connector/marlin"
@@ -31,7 +31,6 @@ import (
 	// Tendermint Core Chains
 	"github.com/supragya/tendermint_connector/chains"
 	"github.com/supragya/tendermint_connector/chains/irisnet"
-
 )
 
 var peerPort, rpcPort, marlinPort, listenPort int
@@ -59,7 +58,6 @@ func init() {
 	connectCmd.Flags().IntVarP(&marlinPort, "marlinport", "n", 15003, "Marlin TCP Bridge IP port")
 	connectCmd.Flags().IntVarP(&listenPort, "listenport", "l", 59001, "Port on which Connector should listen for incoming connections from peer. Only applicable for LISTEN mode.")
 }
-
 
 func getRPCNodeStatus(rpcAddr string) (map[string]interface{}, error) {
 	log.Info("Retrieving Information from RPC server")
@@ -97,13 +95,13 @@ func extractNodeInfo(rpcNodeStatus map[string]interface{}) map[string]interface{
 	}
 }
 
-func invokeHandler(node chains.NodeType, 
-					peerAddr string, 
-					marlinTo chan types.MarlinMessage, 
-					marlinFrom chan types.MarlinMessage,
-					isConnectionOutgoing bool,
-					keyFile string,
-					listenPort int) {
+func invokeHandler(node chains.NodeType,
+	peerAddr string,
+	marlinTo chan types.MarlinMessage,
+	marlinFrom chan types.MarlinMessage,
+	isConnectionOutgoing bool,
+	keyFile string,
+	listenPort int) {
 	log.Info("Trying to match ", node, " to available tendermint core handlers")
 
 	switch node {
@@ -123,9 +121,9 @@ func connect() {
 
 	if keyFile != "" && isConnectionOutgoing {
 		log.Warning("TMCore connector is using a KeyFile to connect to TMCore peer in DIAL mode." +
-					" KeyFiles are useful to connect with peer in LISTEN mode in most use cases since peer would dial a specific peer which connector listens to." + 
-					" Configuring KeyFile usage in DIAL mode may lead to unsuccessful connections if peer blacklists connector's ID." +
-					" It is advised that you let connector use anonymous identities if possible.")
+			" KeyFiles are useful to connect with peer in LISTEN mode in most use cases since peer would dial a specific peer which connector listens to." +
+			" Configuring KeyFile usage in DIAL mode may lead to unsuccessful connections if peer blacklists connector's ID." +
+			" It is advised that you let connector use anonymous identities if possible.")
 		time.Sleep(5 * time.Second) // Sleep so that warning message is clearly read
 	}
 
