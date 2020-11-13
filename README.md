@@ -49,13 +49,13 @@ For configuring any of this for runtime, the following can be used for changed p
 tendermint_connector --server_address 127.0.0.2 --rpc_port 21222
 ```
 
-### tendermint_connector as a keyfile generator for persistent peer connection between TMCore and tendermint_connector
+### tendermint_connector keyfiles for persistent peer connection between TMCore and tendermint_connector
 ```
 tendermint_connector keyfile
 ```
-Tendermint connector can act as a tendermint peer who listens for connections instead of dialing TMCore itself. For this, you may need a persistent node ID to put in `config.toml` file for your real tendermint node. This is of format: *ae239af43..9bd7@127.0.0.1:266657*. This is essentially **<nodeID>@<IP>:<PORT>**. A keyfile for tendermint_connector is a file which describes the nodeID for tendermint_connector to use across process runs; it provides tendermint_connector with keys for fulfilling it's job as the given nodeID.
+Tendermint connector can act as a tendermint peer who listens for connections instead of dialing TMCore itself. For this, you may need a persistent node ID to put in `config.toml` file for your real tendermint node. This is of format: *ae239af43..9bd7@127.0.0.1:266657*. This is essentially **nodeID@IP:PORT**. A keyfile for tendermint_connector is a file which describes the nodeID for tendermint_connector to use across process runs; it provides tendermint_connector with keys for fulfilling it's job as the given nodeID.
 
-For example, you can generate a keyfile for irinet chain using the following command:
+For example, you can generate a keyfile for irisnet chain using the following command:
 ```
 tendermint_connector keyfile --chain irisnet --filelocation irisnetkeys.json --generate
 ```
@@ -76,7 +76,7 @@ tendermint_connector connect --keyfile irisnetkeys.json
 
 You may wish to verify the integrity of generated keyfiles. This can be done by simply (no `--generate` flag):
 ```
-tendermint_connector keyfile --keyfile irisnetkeys.json --chain irinet
+tendermint_connector keyfile --keyfile irisnetkeys.json --chain irisnet
 ```
 
 ### tendermint_connector as a spamfilter for Marlin Relay
