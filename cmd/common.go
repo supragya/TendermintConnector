@@ -28,9 +28,9 @@ import (
 	"github.com/supragya/tendermint_connector/chains/irisnet"
 )
 
-var peerPort, rpcPort, marlinPort, listenPort int
+var peerPort, rpcPort, marlinPort, listenPortPeer, listenPortMarlin int
 var peerIP, marlinIP, keyFile, chain, fileLocation string
-var isConnectionOutgoing, isGenerate bool
+var isConnectionOutgoing, isGenerate, isMarlinconnectionOutgoing bool
 
 func getRPCNodeStatus(rpcAddr string) (map[string]interface{}, error) {
 	log.Info("Retrieving Information from RPC server")
@@ -68,19 +68,19 @@ func extractNodeInfo(rpcNodeStatus map[string]interface{}) map[string]interface{
 	}
 }
 
-func invokeHandler(node chains.NodeType,
+func invokeTMHandler(node chains.NodeType,
 	peerAddr string,
 	marlinTo chan types.MarlinMessage,
 	marlinFrom chan types.MarlinMessage,
 	isConnectionOutgoing bool,
 	keyFile string,
-	listenPort int) {
+	listenPortPeer int) {
 	log.Info("Trying to match ", node, " to available tendermint core handlers")
 
 	switch node {
 	case irisnet.ServicedTMCore:
 		log.Info("Attaching Irisnet TM Handler to service given TM core")
-		irisnet.Run(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPort)
+		irisnet.Run(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
 	default:
 		log.Error("Cannot find any handler for ", node)
 		return

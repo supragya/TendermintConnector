@@ -41,12 +41,12 @@ var spamFilterCmd = &cobra.Command{
 		}
 
 		// Channels
-		marlinTo := make(chan types.MarlinMessage, 1)
-		marlinFrom := make(chan types.MarlinMessage, 1)
+		marlinTo := make(chan types.MarlinMessage, 1000)
+		marlinFrom := make(chan types.MarlinMessage, 1000)
 
 		nodeInfo := extractNodeInfo(nodeStatus)
 
-		go marlin.Run(marlinAddr, marlinTo, marlinFrom, false)
+		go marlin.Run(marlinAddr, marlinTo, marlinFrom, isMarlinconnectionOutgoing, listenPortMarlin, true)
 
 		invokeSpamFilter(nodeInfo["nodeType"].(chains.NodeType), rpcAddr, marlinTo, marlinFrom)
 	},
@@ -56,6 +56,8 @@ func init() {
 	rootCmd.AddCommand(spamFilterCmd)
 	spamFilterCmd.Flags().StringVarP(&peerIP, "peerip", "p", "127.0.0.1", "Tendermint RPC IP address")
 	spamFilterCmd.Flags().IntVarP(&rpcPort, "rpcport", "r", 26657, "Tendermint Core rpc port")
-	connectCmd.Flags().StringVarP(&marlinIP, "marlinip", "m", "127.0.0.1", "Marlin TCP Bridge IP address")
-	connectCmd.Flags().IntVarP(&marlinPort, "marlinport", "n", 15003, "Marlin TCP Bridge IP port")
+	spamFilterCmd.Flags().StringVarP(&marlinIP, "marlinip", "m", "127.0.0.1", "Marlin TCP Bridge IP address")
+	spamFilterCmd.Flags().IntVarP(&marlinPort, "marlinport", "n", 15003, "Marlin TCP Bridge IP port")
+	spamFilterCmd.Flags().BoolVarP(&isMarlinconnectionOutgoing, "marlindial", "e", false, "Connector DIALs Marlin if flag is set, otherwise connector LISTENs for connections")
+	spamFilterCmd.Flags().IntVarP(&listenPortMarlin, "listenportmarlin", "j", 59002, "Port on which Connector should listen for incoming connections from Marlin. Only applicable for Marlin side LISTEN mode.")
 }

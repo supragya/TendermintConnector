@@ -6,6 +6,9 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	marlinTypes "github.com/supragya/tendermint_connector/types"
+
+	// Protocols
+	"github.com/supragya/tendermint_connector/marlin"
 )
 
 func RunSpamFilter(rpcAddr string, 
@@ -19,6 +22,8 @@ func RunSpamFilter(rpcAddr string,
 		os.Exit(1)
 	}
 
+	marlin.AllowServicedChainMessages(handler.servicedChainId)
+
 	err = handler.beginServicingSpamFilter()
 	if err != nil {
 		log.Error("Error encountered while servicing spam filter: ", err)
@@ -30,6 +35,7 @@ func RunSpamFilter(rpcAddr string,
 }
 
 func (h *TendermintHandler) beginServicingSpamFilter() error {
+	log.Info("Running TM side spam filter")
 	// Register Messages
 	RegisterPacket(h.codec)
 	RegisterConsensusMessages(h.codec)
@@ -46,11 +52,28 @@ func (h *TendermintHandler) beginServicingSpamFilter() error {
 
 	for msg := range h.marlinFrom {
 		switch msg.Channel {
+		case channelBc:
+			log.Debug("TMCore <-> Marlin Blockhain is not serviced")
+			h.marlinTo <- blockMessage
 		case channelCsSt:
 			h.marlinTo <- allowMessage
+		case channelCsDC:
+			h.marlinTo <- blockMessage
+			log.Debug("TMCore <-> Marlin Consensensus Data Channel is not serviced")
+		case channelCsVo:
+			h.marlinTo <- blockMessage
+			log.Debug("TMCore <-> Marlin Consensensus Vote Channel is not serviced")
+		case channelCsVs:
+			h.marlinTo <- blockMessage
+			log.Debug("TMCore <-> Marlin Consensensus Vote Set Bits Channel is not serviced")
+		case channelMm:
+			h.marlinTo <- blockMessage
+			log.Debug("TMCore <-> Marlin Mempool Channel is not serviced")
+		case channelEv:
+			h.marlinTo <- blockMessage
+			log.Debug("TMCore <-> MarlinEvidence Channel is not serviced")
 		default:
-			log.Error("node <- connector Not servicing undecipherable channel ", msg.Channel)
-			_ = blockMessage
+			h.marlinTo <- blockMessage
 		}
 	}
 

@@ -135,7 +135,7 @@ func (h *TendermintHandler) dialPeer() error {
 }
 
 func (h *TendermintHandler) acceptPeer() error {
-	log.Info("Listening for dials to ",
+	log.Info("TMCore side listening for dials to ",
 		string(hex.EncodeToString(h.privateKey.PubKey().Address())), "@<SYSTEM-IP-ADDR>:", h.listenPort)
 
 	listener, err := net.Listen("tcp", "0.0.0.0:"+strconv.Itoa(h.listenPort))

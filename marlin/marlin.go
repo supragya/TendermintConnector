@@ -5,8 +5,7 @@ import (
 	"io"
 	"net"
 	"os"
-	// "fmt"
-	// "io/ioutil"
+	"strconv"
 	"encoding/binary"
 	"time"
 
@@ -32,6 +31,8 @@ func AllowServicedChainMessages(servicedChainId uint32) {
 type MarlinHandler struct {
 	marlinConn      *bufio.ReadWriter
 	marlinAddr      string
+	isMarlinconnectionOutgoing bool
+	listenPort		 int
 	marlinTo        chan types.MarlinMessage
 	marlinFrom      chan types.MarlinMessage
 	signalConnError chan struct{}
@@ -42,18 +43,28 @@ type MarlinHandler struct {
 // Run acts as the entry point to marlin side connection logic.
 // Marlin Side Connector requires two channels for sending / recieving messages
 // from peer side connector.
-func Run(marlinAddr string, marlinTo chan types.MarlinMessage, marlinFrom chan types.MarlinMessage, isSpamFiltering bool) {
+func Run(marlinAddr string, 
+	marlinTo chan types.MarlinMessage, 
+	marlinFrom chan types.MarlinMessage,
+	isMarlinconnectionOutgoing bool,
+	listenPortMarlin int,
+	isSpamFiltering bool) {
 	log.Info("Starting Marlin TCP Bridge Handler")
 
 	for {
-		handler, err := createMarlinHandler(marlinAddr, marlinTo, marlinFrom)
+		handler, err := createMarlinHandler(marlinAddr, marlinTo, marlinFrom, isMarlinconnectionOutgoing, listenPortMarlin)
 
 		if err != nil {
 			log.Error("Error encountered while creating Marlin Handler: ", err)
 			os.Exit(1)
 		}
 
-		err = handler.dialMarlin()
+		if !isMarlinconnectionOutgoing {
+			err = handler.dialMarlin()
+		} else {
+			err = handler.acceptMarlin()
+		}
+		
 		if err != nil {
 			log.Error("Connection establishment with Marlin TCP Bridge unsuccessful: ", err)
 			goto REATTEMPT_CONNECTION
@@ -80,11 +91,15 @@ func Run(marlinAddr string, marlinTo chan types.MarlinMessage, marlinFrom chan t
 
 func createMarlinHandler(marlinAddr string,
 	marlinTo chan types.MarlinMessage,
-	marlinFrom chan types.MarlinMessage) (MarlinHandler, error) {
+	marlinFrom chan types.MarlinMessage,
+	isMarlinconnectionOutgoing bool,
+	listenPortMarlin int) (MarlinHandler, error) {
 	return MarlinHandler{
 		marlinAddr:      marlinAddr,
 		marlinTo:        marlinTo,
 		marlinFrom:      marlinFrom,
+		isMarlinconnectionOutgoing: isMarlinconnectionOutgoing,
+		listenPort: listenPortMarlin,
 		signalConnError: make(chan struct{}, 1),
 		signalShutSend:  make(chan struct{}, 1),
 		signalShutRecv:  make(chan struct{}, 1),
@@ -97,6 +112,24 @@ func (h *MarlinHandler) dialMarlin() error {
 		return err
 	}
 	h.marlinConn = bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
+	return nil
+}
+
+func (h *MarlinHandler) acceptMarlin() error {
+	log.Info("Marlin side listening for dials to tcp://0.0.0.0:", h.listenPort)
+
+	listener, err := net.Listen("tcp", "0.0.0.0:"+strconv.Itoa(h.listenPort))
+	if err != nil {
+		return err
+	}
+
+	conn, err := listener.Accept()
+	if err != nil {
+		return err
+	}
+
+	h.marlinConn = bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
+
 	return nil
 }
 
@@ -240,15 +273,15 @@ func (h *MarlinHandler) recvRoutineConnection() {
 // ---------------------- SPAM CHECKING INTERFACE ------------------------------------
 
 func (h *MarlinHandler) beginServicingSpamFilter() {
-	go h.sendRoutineConnection()
-	go h.recvRoutineConnection()	
+	go h.sendRoutineSpamFilter()
+	go h.recvRoutineSpamFilter()	
 }
 
 // sendRoutineSpamFilter is the routine that reads data from peer side connector and makes it available to marlin relay
 // Messages on wire are single bytes per spam filter request and are either byte(0x00) for block and byte(0x01) for allow
 // Messages from peer connector on channel is defined using types.marlinMessage
 func (h *MarlinHandler) sendRoutineSpamFilter() {
-	log.Info("Marlin <- Connector Routine started")
+	log.Info("Marlin <- Connector (Spamfilter) Routine started")
 
 	for msg := range h.marlinTo {
 		select {
@@ -291,7 +324,7 @@ func (h *MarlinHandler) sendRoutineSpamFilter() {
 // Messages on wire are encoded with Marlin Tendermint Data Transfer Protocol v1 prepended with length of message
 // Messages pushed to peer connector on channel is defined using types.marlinMessage
 func (h *MarlinHandler) recvRoutineSpamFilter() {
-	log.Info("Marlin -> Connector Routine started")
+	log.Info("Marlin -> Connector (Spamfilter) Routine started")
 	for {
 		select {
 		case <-h.signalShutRecv:
@@ -322,7 +355,6 @@ func (h *MarlinHandler) recvRoutineSpamFilter() {
 
 		tmMessage := wireProtocol.TendermintMessage{}
 		proto.Unmarshal(buffer, &tmMessage)
-		log.Debug("Marlin -> Connector recieved message: ", buffer, " ", tmMessage)
 
 		if tmMessage.GetChainId() == currentlyServicing && messageLen > 0 {
 			internalPackets := []types.PacketMsg{}

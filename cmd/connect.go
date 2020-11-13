@@ -46,9 +46,11 @@ func init() {
 	connectCmd.Flags().IntVarP(&rpcPort, "rpcport", "r", 26657, "Tendermint Core rpc port")
 	connectCmd.Flags().StringVarP(&keyFile, "keyfile", "k", "", "KeyFile that Connector should use to connect to peer. If set, keypair in KeyFile will be used for all connections, else new KeyPair is generated on the fly.")
 	connectCmd.Flags().BoolVarP(&isConnectionOutgoing, "dial", "d", false, "Connector DIALs TMCore if flag is set, otherwise connector LISTENs for connections")
+	connectCmd.Flags().BoolVarP(&isMarlinconnectionOutgoing, "marlindial", "e", false, "Connector DIALs Marlin if flag is set, otherwise connector LISTENs for connections")
 	connectCmd.Flags().StringVarP(&marlinIP, "marlinip", "m", "127.0.0.1", "Marlin TCP Bridge IP address")
 	connectCmd.Flags().IntVarP(&marlinPort, "marlinport", "n", 15003, "Marlin TCP Bridge IP port")
-	connectCmd.Flags().IntVarP(&listenPort, "listenport", "l", 59001, "Port on which Connector should listen for incoming connections from peer. Only applicable for LISTEN mode.")
+	connectCmd.Flags().IntVarP(&listenPortPeer, "listenportpeer", "l", 59001, "Port on which Connector should listen for incoming connections from peer. Only applicable for Peer side LISTEN mode.")
+	connectCmd.Flags().IntVarP(&listenPortMarlin, "listenportmarlin", "j", 59002, "Port on which Connector should listen for incoming connections from Marlin. Only applicable for Marlin side LISTEN mode.")
 }
 
 func connect() {
@@ -82,7 +84,7 @@ func connect() {
 
 	nodeInfo := extractNodeInfo(nodeStatus)
 
-	go marlin.Run(marlinAddr, marlinTo, marlinFrom, false)
+	go marlin.Run(marlinAddr, marlinTo, marlinFrom, isMarlinconnectionOutgoing, listenPortMarlin, false)
 
-	invokeHandler(nodeInfo["nodeType"].(chains.NodeType), peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPort)
+	invokeTMHandler(nodeInfo["nodeType"].(chains.NodeType), peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
 }
