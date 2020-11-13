@@ -3,17 +3,17 @@
 </p>
 
 # Tendermint Connector
-Tendermint connector is a bridging application required for Tendermint based blockchains to interface with Marlin Protocol. Tendermint Connector connects as a peer to already running TM based blockchain and retrieves / pushes selective messages that the peer needs from / to Marlin Relays.
+Tendermint Connector is a bridging application required for Tendermint based blockchains to interface with Marlin Protocol. Tendermint Connector connects as a peer to already running TM based blockchain and retrieves / pushes selective messages that the peer needs from / to Marlin Relays. Tendermint Connector also doubles up as a spam checker machanism for marlin relay.
 
 ## Serviced Blockchains
 Currently, the following blockchains are serviced by **tendermint_connector**:
-1. IrisNet Mainnet 0.16.3
+1. Irisnet Mainnet 0.16.3
 
 ## Building the application
 Ensure that go is installed on the build system - ensure all is good using `go version`. This should return good version string. Proceed to build the application using:
 ```
-cd build
-go build ..
+make
+make install
 ```
 
 ## Running the application
@@ -26,28 +26,41 @@ The tendermint_connector application provides the following features:
 
 For finding version info of the application, supported chains and supported encodings for marlin relay, run:
 ```
-./tendermint_connector --version
+tendermint_connector --version
 ```
 
 This should return you information such as this:
 ```
 tendermint_connector version 0.1
-+ [Tendermint Chain]   IRISNet Mainnet 0.16.3 (Consensus State transfers)
-+ [Marlin TM Protocol] marlinTMSTfr1 - v0.1 Marlin TM Consensus State Transfer Protocol
++ [Tendermint Chain]   IRISNet Mainnet 0.16.3 (Consensus State transfers) v0.1
++ [Marlin TM Protocol] Marlin Tendermint Data Transfer Protocol v1
 ```
 
-Connect to a Tendermint node using
+### tendermint_connector as a connector between TMCore and Marlin Relay
 ```
-./tendermint connect
+tendermint connect --marlindial
 ```
-Tendermint connector will automatically try to connect using the following default information (available by `tendermint_connector connect --help`):
-- Peer Node Port: 26656
-- Peer Node RPC : 26657
-- Peer Node IP  : 127.0.0.1
-- Marlin Port   : 15003
+Tendermint connector will automatically try to connect using the default parameters.
+
+You can learn more about the *tendermint_connector connect* command using `tendermint_connector connect -h`.
 
 For configuring any of this for runtime, the following can be used for changed params:
 ```
-./tendermint_connector --server_address 127.0.0.2 --rpc_port 21222
+tendermint_connector --server_address 127.0.0.2 --rpc_port 21222
 ```
 
+### tendermint_connector as a spamfilter for Marlin Relay
+```
+tendermint spamfilter
+```
+Tendermint connector will run as a spam filter endpoint for verifying messages recieved at any relay endpoint. The expected format of message in spamfilter mode is proto3 encoded Marlin Tendermint Data Transfer Protocol messages. Spamfilter replies with a single byte (0 or 1) for whether message is spam (0), hence to be blocked or not (1), hence to be allowed.
+
+You can learn more about the *tendermint_connector spamfilter* command using `tendermint_connector spamfilter -h`.
+
+For configuring any of this for runtime, the following can be used for changed params:
+```
+tendermint_connector spamfilter --peerip 127.0.0.2 --rpcport 26667 --listenportmarlin 59004 
+```
+
+## Technical Overview
+--- TECH OVERVIEW GOES HERE --

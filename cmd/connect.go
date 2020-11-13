@@ -35,7 +35,39 @@ var connectCmd = &cobra.Command{
 	Short: "Act as a connector between TM Core and Marlin Relay",
 	Long:  `Act as a connector between TM Core and Marlin Relay`,
 	Run: func(cmd *cobra.Command, args []string) {
-		connect()
+		peerAddr := fmt.Sprintf("%v:%v", peerIP, peerPort)
+		rpcAddr := fmt.Sprintf("%v:%v", peerIP, rpcPort)
+		marlinAddr := fmt.Sprintf("%v:%v", marlinIP, marlinPort)
+
+		if keyFile != "" && isConnectionOutgoing {
+			log.Warning("TMCore connector is using a KeyFile to connect to TMCore peer in DIAL mode." +
+				" KeyFiles are useful to connect with peer in LISTEN mode in most use cases since peer would dial a specific peer which connector listens to." +
+				" Configuring KeyFile usage in DIAL mode may lead to unsuccessful connections if peer blacklists connector's ID." +
+				" It is advised that you let connector use anonymous identities if possible.")
+			time.Sleep(5 * time.Second) // Sleep so that warning message is clearly read
+		}
+
+		if isConnectionOutgoing {
+			log.Info("Configuring to DIAL Peer (TMCore) connection address: ", peerAddr, "; rpc address: ", rpcAddr)
+		} else {
+			log.Info("Configuring to LISTEN Peer (TMCore) connection address: ", peerAddr, "; rpc address: ", rpcAddr)
+		}
+		log.Info("Marlin connection address: ", marlinAddr)
+
+		nodeStatus, err := getRPCNodeStatus(rpcAddr)
+		if err != nil {
+			return
+		}
+
+		// Channels
+		marlinTo := make(chan types.MarlinMessage, 1000)
+		marlinFrom := make(chan types.MarlinMessage, 1000)
+
+		nodeInfo := extractNodeInfo(nodeStatus)
+
+		go marlin.Run(marlinAddr, marlinTo, marlinFrom, isMarlinconnectionOutgoing, listenPortMarlin, false)
+
+		invokeTMHandler(nodeInfo["nodeType"].(chains.NodeType), peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
 	},
 }
 
@@ -51,40 +83,4 @@ func init() {
 	connectCmd.Flags().IntVarP(&marlinPort, "marlinport", "n", 15003, "Marlin TCP Bridge IP port")
 	connectCmd.Flags().IntVarP(&listenPortPeer, "listenportpeer", "l", 59001, "Port on which Connector should listen for incoming connections from peer. Only applicable for Peer side LISTEN mode.")
 	connectCmd.Flags().IntVarP(&listenPortMarlin, "listenportmarlin", "j", 59002, "Port on which Connector should listen for incoming connections from Marlin. Only applicable for Marlin side LISTEN mode.")
-}
-
-func connect() {
-	peerAddr := fmt.Sprintf("%v:%v", peerIP, peerPort)
-	rpcAddr := fmt.Sprintf("%v:%v", peerIP, rpcPort)
-	marlinAddr := fmt.Sprintf("%v:%v", marlinIP, marlinPort)
-
-	if keyFile != "" && isConnectionOutgoing {
-		log.Warning("TMCore connector is using a KeyFile to connect to TMCore peer in DIAL mode." +
-			" KeyFiles are useful to connect with peer in LISTEN mode in most use cases since peer would dial a specific peer which connector listens to." +
-			" Configuring KeyFile usage in DIAL mode may lead to unsuccessful connections if peer blacklists connector's ID." +
-			" It is advised that you let connector use anonymous identities if possible.")
-		time.Sleep(5 * time.Second) // Sleep so that warning message is clearly read
-	}
-
-	if isConnectionOutgoing {
-		log.Info("Configuring to DIAL Peer (TMCore) connection address: ", peerAddr, "; rpc address: ", rpcAddr)
-	} else {
-		log.Info("Configuring to LISTEN Peer (TMCore) connection address: ", peerAddr, "; rpc address: ", rpcAddr)
-	}
-	log.Info("Marlin connection address: ", marlinAddr)
-
-	nodeStatus, err := getRPCNodeStatus(rpcAddr)
-	if err != nil {
-		return
-	}
-
-	// Channels
-	marlinTo := make(chan types.MarlinMessage, 1000)
-	marlinFrom := make(chan types.MarlinMessage, 1000)
-
-	nodeInfo := extractNodeInfo(nodeStatus)
-
-	go marlin.Run(marlinAddr, marlinTo, marlinFrom, isMarlinconnectionOutgoing, listenPortMarlin, false)
-
-	invokeTMHandler(nodeInfo["nodeType"].(chains.NodeType), peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
 }
