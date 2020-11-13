@@ -16,10 +16,7 @@ limitations under the License.
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -30,18 +27,13 @@ import (
 
 	// Tendermint Core Chains
 	"github.com/supragya/tendermint_connector/chains"
-	"github.com/supragya/tendermint_connector/chains/irisnet"
 )
-
-var peerPort, rpcPort, marlinPort, listenPort int
-var peerIP, marlinIP, keyFile string
-var isConnectionOutgoing bool
 
 // connectCmd represents the connect command
 var connectCmd = &cobra.Command{
 	Use:   "connect",
-	Short: "Connect to a TM Core",
-	Long:  `Connect to a TM Core`,
+	Short: "Act as a connector between TM Core and Marlin Relay",
+	Long:  `Act as a connector between TM Core and Marlin Relay`,
 	Run: func(cmd *cobra.Command, args []string) {
 		connect()
 	},
@@ -57,61 +49,6 @@ func init() {
 	connectCmd.Flags().StringVarP(&marlinIP, "marlinip", "m", "127.0.0.1", "Marlin TCP Bridge IP address")
 	connectCmd.Flags().IntVarP(&marlinPort, "marlinport", "n", 15003, "Marlin TCP Bridge IP port")
 	connectCmd.Flags().IntVarP(&listenPort, "listenport", "l", 59001, "Port on which Connector should listen for incoming connections from peer. Only applicable for LISTEN mode.")
-}
-
-func getRPCNodeStatus(rpcAddr string) (map[string]interface{}, error) {
-	log.Info("Retrieving Information from RPC server")
-	var data map[string]interface{}
-
-	resp, err := http.Get("http://" + rpcAddr + "/status")
-	if err != nil {
-		log.Error("Cannot retrieve node information from RPC server. Is tendermint node running?")
-		return data, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Error(err)
-		return data, err
-	}
-	json.Unmarshal(body, &data)
-
-	return data, nil
-}
-
-func extractNodeInfo(rpcNodeStatus map[string]interface{}) map[string]interface{} {
-	nodeResult := rpcNodeStatus["result"].(map[string]interface{})["node_info"].(map[string]interface{})
-	return map[string]interface{}{
-		"nodeType": chains.NodeType{
-			Version:              nodeResult["version"].(string),
-			Network:              nodeResult["network"].(string),
-			ProtocolVersionApp:   nodeResult["protocol_version"].(map[string]interface{})["app"].(string),
-			ProtocolVersionBlock: nodeResult["protocol_version"].(map[string]interface{})["block"].(string),
-			ProtocolVersionP2p:   nodeResult["protocol_version"].(map[string]interface{})["p2p"].(string),
-		},
-		"moniker": nodeResult["moniker"],
-		"id":      nodeResult["id"],
-	}
-}
-
-func invokeHandler(node chains.NodeType,
-	peerAddr string,
-	marlinTo chan types.MarlinMessage,
-	marlinFrom chan types.MarlinMessage,
-	isConnectionOutgoing bool,
-	keyFile string,
-	listenPort int) {
-	log.Info("Trying to match ", node, " to available tendermint core handlers")
-
-	switch node {
-	case irisnet.ServicedTMCore:
-		log.Info("Attaching Irisnet TM Handler to service given TM core")
-		irisnet.Run(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPort)
-	default:
-		log.Error("Cannot find any handler for ", node)
-		return
-	}
 }
 
 func connect() {
@@ -145,7 +82,7 @@ func connect() {
 
 	nodeInfo := extractNodeInfo(nodeStatus)
 
-	go marlin.Run(marlinAddr, marlinTo, marlinFrom)
+	go marlin.Run(marlinAddr, marlinTo, marlinFrom, false)
 
 	invokeHandler(nodeInfo["nodeType"].(chains.NodeType), peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPort)
 }

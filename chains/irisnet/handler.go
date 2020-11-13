@@ -46,7 +46,7 @@ func Run(peerAddr string,
 	}
 
 	for {
-		handler, err := createTMHandler(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, listenPort)
+		handler, err := createTMHandler(peerAddr, "0.0.0.0:0", marlinTo, marlinFrom, isConnectionOutgoing, listenPort)
 
 		if err != nil {
 			log.Error("Error encountered while creating TM Handler: ", err)
@@ -89,6 +89,7 @@ func Run(peerAddr string,
 }
 
 func createTMHandler(peerAddr string,
+	rpcAddr string,
 	marlinTo chan marlinTypes.MarlinMessage,
 	marlinFrom chan marlinTypes.MarlinMessage,
 	isConnectionOutgoing bool,
@@ -105,6 +106,7 @@ func createTMHandler(peerAddr string,
 		listenPort:           listenPort,
 		isConnectionOutgoing: isConnectionOutgoing,
 		peerAddr:             peerAddr,
+		rpcAddr:			  rpcAddr,
 		privateKey:           privateKey,
 		codec:                amino.NewCodec(),
 		peerState:            tmPeerStateNotConnected,
@@ -161,9 +163,9 @@ func (h *TendermintHandler) upgradeConnectionAndHandshake() error {
 		return err
 	}
 
-	log.Info("Established connection with " +
-		string(hex.EncodeToString(h.secretConnection.RemotePubKey().Address())) + "@" + h.peerAddr +
-		" a.k.a. " + h.peerNodeInfo.Moniker)
+	log.Info("Established connection with TM peer [" +
+		string(hex.EncodeToString(h.secretConnection.RemotePubKey().Address())) +
+		"] a.k.a. " + h.peerNodeInfo.Moniker)
 	return nil
 }
 
@@ -509,6 +511,7 @@ type TendermintHandler struct {
 	listenPort           int
 	isConnectionOutgoing bool
 	peerAddr             string
+	rpcAddr				 string
 	privateKey           ed25519.PrivKeyEd25519
 	codec                *amino.Codec
 	baseConnection       net.Conn

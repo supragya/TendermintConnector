@@ -3,10 +3,11 @@ import sys
 
 # Create a TCP/IP socket
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-server_address = ('localhost', 15005)
+server_address = ('localhost', 15000)
 sock.bind(server_address)
-
+sock2.connect('localhost', 59002)
 sock.listen(1)
 
 while True:
@@ -19,11 +20,10 @@ while True:
         # Receive the data in small chunks and retransmit it
         while True:
             data = connection.recv(100)
-            print("Recv: ", end="")
-            for i in range(len(data)):
-                print(data[i], end=" ")
+            print(str(len(data)), end="\t", flush=True)
             if data:
                 connection.sendall(data)
+                sock2.sendall(data)
             else:
                 break
             

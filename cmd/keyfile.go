@@ -24,9 +24,6 @@ import (
 	"github.com/supragya/tendermint_connector/chains/irisnet"
 )
 
-var chain, fileLocation string
-var isGenerate bool
-
 // connectCmd represents the connect command
 var keyFileCmd = &cobra.Command{
 	Use:   "keyfile",
