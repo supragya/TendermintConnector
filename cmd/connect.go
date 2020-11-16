@@ -44,7 +44,7 @@ var connectCmd = &cobra.Command{
 				" KeyFiles are useful to connect with peer in LISTEN mode in most use cases since peer would dial a specific peer which connector listens to." +
 				" Configuring KeyFile usage in DIAL mode may lead to unsuccessful connections if peer blacklists connector's ID." +
 				" It is advised that you let connector use anonymous identities if possible.")
-			time.Sleep(5 * time.Second) // Sleep so that warning message is clearly read
+			time.Sleep(3 * time.Second) // Sleep so that warning message is clearly read
 		}
 
 		if isConnectionOutgoing {

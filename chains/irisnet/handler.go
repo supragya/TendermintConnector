@@ -334,8 +334,7 @@ func (h *TendermintHandler) sendRoutine() {
 						}
 					}
 					h.throughput.putInfo("to", "CsSt+", 1)
-				}
-				if !sendAhead {
+				} else {
 					h.throughput.putInfo("to", "CsSt-", uint32(len(msg.Packets)))
 				}
 			default:
@@ -413,7 +412,7 @@ FOR_LOOP:
 			case channelBc:
 				log.Debug("TMCore -> Connector Blockhain is not serviced")
 			case channelCsSt:
-
+				// TODO - Reflect NRS
 				h.channelBuffer[channelCsSt] = append(h.channelBuffer[channelCsSt],
 					marlinTypes.PacketMsg{
 						ChannelID: uint32(pkt.ChannelID),
@@ -427,8 +426,6 @@ FOR_LOOP:
 						Channel: channelCsSt,
 						Packets: h.channelBuffer[channelCsSt],
 					}
-
-					// h.throughput.putInfo("from", 1, 0, (message), 0)
 					select {
 					case h.marlinTo <- message:
 					default:
@@ -442,7 +439,10 @@ FOR_LOOP:
 			case channelCsDC:
 				log.Debug("TMCore -> Connector Consensensus Data Channel is not serviced")
 			case channelCsVo:
-				log.Debug("TMCore -> Connector Consensensus Vote Channel is not serviced")
+				if pkt.EOF == byte(0x01) {
+					h.throughput.putInfo("from", "CsVoXX", 1)
+				}
+				// log.Info("TMCore -> Connector Consensensus Vote Channel is not serviced")
 			case channelCsVs:
 				log.Debug("TMCore -> Connector Consensensus Vote Set Bits Channel is not serviced")
 			case channelMm:

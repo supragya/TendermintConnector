@@ -56,6 +56,23 @@ func (h *TendermintHandler) beginServicingSpamFilter() error {
 			log.Debug("TMCore <-> Marlin Blockhain is not serviced")
 			h.marlinTo <- blockMessage
 		case channelCsSt:
+			// Construct complete message from packets
+			var sendAhead = true
+
+			// Unmarshalling Test
+			for _, pkt := range msg.Packets {
+				var cmsg ConsensusMessage
+				err := h.codec.UnmarshalBinaryBare(pkt.Bytes, &cmsg)
+				if err != nil {
+					sendAhead = false
+				}
+			}
+
+			if sendAhead {
+				h.marlinTo <- allowMessage
+			} else {
+				h.marlinTo <- blockMessage
+			}
 			h.marlinTo <- allowMessage
 		case channelCsDC:
 			h.marlinTo <- blockMessage

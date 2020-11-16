@@ -17,7 +17,3 @@ type PacketMsg struct {
 var ServicedChains = map[string]uint32{
 	"irisnet-0.16.3-mainnet": 1,
 }
-
-const (
-	ChannelConsensusState uint32 = 1
-)
