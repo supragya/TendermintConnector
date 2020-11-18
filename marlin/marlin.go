@@ -105,6 +105,7 @@ func RunDataConnectHandler(marlinAddr string,
 
 		select {
 		case <-handler.signalConnError:
+			// Close bound port - bug
 			handler.signalShutSend <- struct{}{}
 			handler.signalShutRecv <- struct{}{}
 			goto REATTEMPT_CONNECTION
@@ -253,7 +254,7 @@ func (h *MarlinHandler) recvRoutineConnection() {
 	}
 }
 
-// ---------------------- SPAM CHECKING INTERFACE ------------------------------------
+// ---------------------- SPAM FILTER INTERFACE ------------------------------------
 
 // Run acts as the entry point to marlin side connection logic for data connect interface.
 // Marlin Side Connector requires two channels for sending / recieving messages
