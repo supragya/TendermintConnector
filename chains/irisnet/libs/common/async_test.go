@@ -150,7 +150,7 @@ func waitTimeout(t *testing.T, taskResultCh TaskResultCh, taskName string) {
 		} else {
 			assert.Fail(t, "TaskResultCh unexpectedly returned for %v", taskName)
 		}
-	case <-time.After(1 * time.Second): // TODO use deterministic time?
+	case <-time.After(1 * time.Second):
 		// Good!
 	}
 }

@@ -46,7 +46,6 @@ func TestRepeatTimer(t *testing.T) {
 			assert.Equal(t, timeMs, int64(sinceMs))
 		}
 
-		// TODO detect number of running
 		// goroutines to ensure that
 		// no other times will fire.
 		// See https://github.com/tendermint/tendermint/libs/issues/120.

@@ -177,7 +177,6 @@ func (bA *BitArray) not() *BitArray {
 // If bA is longer than o, o is right padded with zeroes
 func (bA *BitArray) Sub(o *BitArray) *BitArray {
 	if bA == nil || o == nil {
-		// TODO: Decide if we should do 1's complement here?
 		return nil
 	}
 	bA.mtx.Lock()

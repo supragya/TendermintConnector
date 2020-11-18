@@ -32,7 +32,7 @@ import (
 var ServicedTMCore chains.NodeType = chains.NodeType{Version: "0.32.2", Network: "irishub", ProtocolVersionApp: "2", ProtocolVersionBlock: "9", ProtocolVersionP2p: "5"}
 
 // Run serves as the entry point for a TM Core handler when serving as a connector
-func Run(peerAddr string,
+func RunDataConnect(peerAddr string,
 	marlinTo chan marlinTypes.MarlinMessage,
 	marlinFrom chan marlinTypes.MarlinMessage,
 	isConnectionOutgoing bool,
@@ -52,8 +52,6 @@ func Run(peerAddr string,
 			log.Error("Error encountered while creating TM Handler: ", err)
 			os.Exit(1)
 		}
-
-		handler.peerState = tmPeerStateNotConnected
 
 		if isConnectionOutgoing {
 			err = handler.dialPeer()
@@ -78,7 +76,6 @@ func Run(peerAddr string,
 			handler.signalShutSend <- struct{}{}
 			handler.signalShutRecv <- struct{}{}
 			handler.signalShutThroughput <- struct{}{}
-			handler.peerState = tmPeerStateShutdown
 			goto REATTEMPT_CONNECTION
 		}
 
@@ -106,10 +103,9 @@ func createTMHandler(peerAddr string,
 		listenPort:           listenPort,
 		isConnectionOutgoing: isConnectionOutgoing,
 		peerAddr:             peerAddr,
-		rpcAddr:			  rpcAddr,
+		rpcAddr:              rpcAddr,
 		privateKey:           privateKey,
 		codec:                amino.NewCodec(),
-		peerState:            tmPeerStateNotConnected,
 		marlinTo:             marlinTo,
 		marlinFrom:           marlinFrom,
 		channelBuffer:        make(map[byte][]marlinTypes.PacketMsg),
@@ -175,13 +171,13 @@ func (h *TendermintHandler) handshake() error {
 		ourNodeInfo DefaultNodeInfo = DefaultNodeInfo{
 			ProtocolVersion{App: 2, Block: 9, P2P: 5},
 			string(hex.EncodeToString(h.privateKey.PubKey().Address())),
-			"tcp://127.0.0.1:20006", //TODO Correct this
+			"tcp://127.0.0.1:20006", //TODO Correct this - v0.2 prerelease
 			"irishub",
 			"0.32.2",
 			[]byte{channelBc, channelCsSt, channelCsDC, channelCsVo,
 				channelCsVs, channelMm, channelEv},
 			"marlin-tendermint-connector",
-			DefaultNodeInfoOther{"on", "tcp://0.0.0.0:26667"}, // TODO: Correct this
+			DefaultNodeInfoOther{"on", "tcp://0.0.0.0:26667"}, // TODO: Correct this - v0.2 prerelease
 		}
 	)
 
@@ -334,8 +330,7 @@ func (h *TendermintHandler) sendRoutine() {
 						}
 					}
 					h.throughput.putInfo("to", "CsSt+", 1)
-				}
-				if !sendAhead {
+				} else {
 					h.throughput.putInfo("to", "CsSt-", uint32(len(msg.Packets)))
 				}
 			default:
@@ -347,7 +342,6 @@ func (h *TendermintHandler) sendRoutine() {
 
 func (h *TendermintHandler) recvRoutine() {
 	log.Info("TMCore -> Connector Routine Started")
-	// var recvBuffer []byte
 
 FOR_LOOP:
 	for {
@@ -413,7 +407,8 @@ FOR_LOOP:
 			case channelBc:
 				log.Debug("TMCore -> Connector Blockhain is not serviced")
 			case channelCsSt:
-
+				// TODO - Reflect NRS - v0.1 prerelease
+				// TODO - Check if hypothesis that all messages from CsSt can be passed to relay or not - does HasVote need to go?. v0.2 prerelease
 				h.channelBuffer[channelCsSt] = append(h.channelBuffer[channelCsSt],
 					marlinTypes.PacketMsg{
 						ChannelID: uint32(pkt.ChannelID),
@@ -427,8 +422,6 @@ FOR_LOOP:
 						Channel: channelCsSt,
 						Packets: h.channelBuffer[channelCsSt],
 					}
-
-					// h.throughput.putInfo("from", 1, 0, (message), 0)
 					select {
 					case h.marlinTo <- message:
 					default:
@@ -442,7 +435,10 @@ FOR_LOOP:
 			case channelCsDC:
 				log.Debug("TMCore -> Connector Consensensus Data Channel is not serviced")
 			case channelCsVo:
-				log.Debug("TMCore -> Connector Consensensus Vote Channel is not serviced")
+				if pkt.EOF == byte(0x01) {
+					h.throughput.putInfo("from", "CsVoXX", 1)
+				}
+				// log.Info("TMCore -> Connector Consensensus Vote Channel is not serviced")
 			case channelCsVs:
 				log.Debug("TMCore -> Connector Consensensus Vote Set Bits Channel is not serviced")
 			case channelMm:
@@ -504,6 +500,7 @@ func (t *throughPutData) presentThroughput(sec time.Duration, shutdownCh chan st
 	}
 }
 
+// TODO - Refactor these structures into separate files since these are common between dataconnect and spamfilter - v0.2 prerelease
 // -------- STRUCTS -------
 
 type TendermintHandler struct {
@@ -511,12 +508,11 @@ type TendermintHandler struct {
 	listenPort           int
 	isConnectionOutgoing bool
 	peerAddr             string
-	rpcAddr				 string
+	rpcAddr              string
 	privateKey           ed25519.PrivKeyEd25519
 	codec                *amino.Codec
 	baseConnection       net.Conn
 	secretConnection     *conn.SecretConnection
-	peerState            int
 	marlinTo             chan marlinTypes.MarlinMessage
 	marlinFrom           chan marlinTypes.MarlinMessage
 	channelBuffer        map[byte][]marlinTypes.PacketMsg
@@ -528,16 +524,6 @@ type TendermintHandler struct {
 	signalShutRecv       chan struct{}
 	signalShutThroughput chan struct{}
 }
-
-// TODO: Check if we even have use for this??
-const (
-	tmPeerStateNotConnected = iota
-	tmPeerStateBaseConnected
-	tmPeerStateConnectionUpgraded
-	tmPeerStateConnectionHandshakeComplete
-	tmPeerStateConnectionError
-	tmPeerStateShutdown
-)
 
 type throughPutData struct {
 	toTMCore   map[string]uint32
@@ -554,8 +540,6 @@ type ProtocolVersion struct {
 type DefaultNodeInfo struct {
 	ProtocolVersion ProtocolVersion `json:"protocol_version"`
 
-	// Authenticate
-	// TODO: replace with NetAddress
 	ID_        string `json:"id"`          // authenticated identifier
 	ListenAddr string `json:"listen_addr"` // accepting incoming
 
@@ -693,7 +677,7 @@ func (m *NewRoundStepMessage) ValidateBasic() error {
 	// NOTE: SecondsSinceStartTime may be negative
 
 	if (m.Height == 1 && m.LastCommitRound != -1) ||
-		(m.Height > 1 && m.LastCommitRound < -1) { // TODO: #2737 LastCommitRound should always be >= 0 for heights > 1
+		(m.Height > 1 && m.LastCommitRound < -1) {
 		return errors.New("Invalid LastCommitRound (for 1st block: -1, for others: >= 0)")
 	}
 	return nil

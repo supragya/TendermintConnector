@@ -8,7 +8,6 @@ import (
 	"github.com/tendermint/tendermint/libs/pubsub/query"
 )
 
-// TODO: fuzzy testing?
 func TestParser(t *testing.T) {
 	cases := []struct {
 		query string

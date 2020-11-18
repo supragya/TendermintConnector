@@ -3,30 +3,30 @@ import sys
 
 # Create a TCP/IP socket
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-server_address_tcp_bridge = ('localhost', 15004)
-sock.bind(server_address_tcp_bridge)
-sock.listen(2)
+server_address = ('localhost', 15006)
+sock.bind(server_address)
+
+sock.listen(1)
 
 while True:
     # Wait for a connection
-    print('connwait TCP Bridge')
-    connection, client_address = sock.accept()
-    print('connwait TCP Bridge')
+    print('waiting for a connection')
     connection, client_address = sock.accept()
     try:
+        print('connection from', client_address)
 
         # Receive the data in small chunks and retransmit it
         while True:
-            data = connection.recv(200)
-            print(str(len(data)), end="\t", flush=True)
+            data = connection.recv(100)
+            for i in range(len(data)):
+                print(data[i], end=" ", flush=True)
             if data:
                 connection.sendall(data)
-                # connection2.sendall(data)
             else:
                 break
             
     finally:
         # Clean up the connection
         connection.close()
+

@@ -1,9 +1,10 @@
 package types
 
 type MarlinMessage struct {
-	ChainID uint32
-	Channel byte
-	Packets []PacketMsg
+	ChainID  uint32
+	Channel  byte        // ChannelID maps to TM channels for data tfr use, 0x01 for allow/0x00 for deny during spamcheck
+	PacketId uint64      // Used only for spam checks
+	Packets  []PacketMsg // Only available during data transfer
 }
 
 type PacketMsg struct {
@@ -17,7 +18,3 @@ type PacketMsg struct {
 var ServicedChains = map[string]uint32{
 	"irisnet-0.16.3-mainnet": 1,
 }
-
-const (
-	ChannelConsensusState uint32 = 1
-)

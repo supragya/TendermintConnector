@@ -3,7 +3,7 @@ package version
 import "bytes"
 
 // Application version
-var applicationVersion string = "0.1"
+var applicationVersion string = "0.1-rc-1"
 
 // Supported Chains
 var supportedChains = []string{
