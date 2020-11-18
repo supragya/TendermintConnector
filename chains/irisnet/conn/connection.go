@@ -28,7 +28,6 @@ const (
 
 	// some of these defaults are written in the user config
 	// flushThrottle, sendRate, recvRate
-	// TODO: remove values present in config
 	defaultFlushThrottle = 100 * time.Millisecond
 
 	defaultSendQueueCapacity   = 1
@@ -585,8 +584,6 @@ FOR_LOOP:
 		// Read more depending on packet type.
 		switch pkt := packet.(type) {
 		case PacketPing:
-			// TODO: prevent abuse, as they cause flush()'s.
-			// https://github.com/tendermint/tendermint/issues/1190
 			c.Logger.Debug("Receive Ping")
 			select {
 			case c.pong <- struct{}{}:
@@ -712,8 +709,6 @@ func (chDesc ChannelDescriptor) FillDefaults() (filled ChannelDescriptor) {
 	return
 }
 
-// TODO: lowercase.
-// NOTE: not goroutine-safe.
 type Channel struct {
 	conn          *MConnection
 	desc          ChannelDescriptor
@@ -850,7 +845,6 @@ func (ch *Channel) recvPacketMsg(packet PacketMsg) ([]byte, error) {
 // Not goroutine-safe
 func (ch *Channel) updateStats() {
 	// Exponential decay of stats.
-	// TODO: optimize.
 	atomic.StoreInt64(&ch.recentlySent, int64(float64(atomic.LoadInt64(&ch.recentlySent))*0.8))
 }
 

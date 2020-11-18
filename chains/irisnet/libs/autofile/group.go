@@ -71,9 +71,6 @@ type Group struct {
 	// this ensures we can cleanup the dir after calling Stop
 	// and the routine won't be trying to access it anymore
 	doneProcessTicks chan struct{}
-
-	// TODO: When we start deleting files, we need to start tracking GroupReaders
-	// and their dependencies.
 }
 
 // OpenGroup creates a new Group with head at headPath. It returns an error if
@@ -188,20 +185,12 @@ func (g *Group) MinIndex() int {
 	return g.minIndex
 }
 
-// Write writes the contents of p into the current head of the group. It
-// returns the number of bytes written. If nn < len(p), it also returns an
-// error explaining why the write is short.
-// NOTE: Writes are buffered so they don't write synchronously
-// TODO: Make it halt if space is unavailable
 func (g *Group) Write(p []byte) (nn int, err error) {
 	g.mtx.Lock()
 	defer g.mtx.Unlock()
 	return g.headBuf.Write(p)
 }
 
-// WriteLine writes line into the current head of the group. It also appends "\n".
-// NOTE: Writes are buffered so they don't write synchronously
-// TODO: Make it halt if space is unavailable
 func (g *Group) WriteLine(line string) error {
 	g.mtx.Lock()
 	defer g.mtx.Unlock()
@@ -707,7 +696,7 @@ func (gr *GroupReader) openFile(index int) error {
 
 	// Update gr.cur*
 	if gr.curFile != nil {
-		gr.curFile.Close() // TODO return error?
+		gr.curFile.Close()
 	}
 	gr.curIndex = index
 	gr.curFile = curFile

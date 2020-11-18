@@ -10,6 +10,8 @@ import (
 	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
+// TODO - annotate with comments, structs also need to be refactored into separate file. v0.2 prerelease
+
 var ServicedKeyFile string = "irisnet"
 var isKeyFileUsed, memoized bool
 var keyFileLocation string
@@ -71,7 +73,7 @@ func VerifyKeyFile(fileLocation string) (bool, error) {
 	var key keyData
 	json.Unmarshal(byteValue, &key)
 
-	// TODO Check these conditions
+	// TODO Check these conditions, add more checks - v0.2 prerelease
 	if string(hex.EncodeToString(key.PrivateKey[:])) == key.PrivateKeyString {
 		log.Info("Integrity for KeyFile: ", fileLocation, " checked. Integrity OK.")
 		return true, nil

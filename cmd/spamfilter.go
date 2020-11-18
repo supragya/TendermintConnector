@@ -19,12 +19,11 @@ import (
 	"fmt"
 	// log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/supragya/tendermint_connector/types"
 	"github.com/supragya/tendermint_connector/marlin"
+	"github.com/supragya/tendermint_connector/types"
 
 	// Tendermint Core Chains
 	"github.com/supragya/tendermint_connector/chains"
-	// "github.com/supragya/tendermint_connector/chains/irisnet"
 )
 
 // connectCmd represents the connect command
@@ -34,7 +33,6 @@ var spamFilterCmd = &cobra.Command{
 	Long:  `Filter Spams on marlin relay`,
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcAddr := fmt.Sprintf("%v:%v", peerIP, rpcPort)
-		marlinAddr := fmt.Sprintf("%v:%v", marlinIP, marlinPort)
 		nodeStatus, err := getRPCNodeStatus(rpcAddr)
 		if err != nil {
 			return
@@ -46,9 +44,10 @@ var spamFilterCmd = &cobra.Command{
 
 		nodeInfo := extractNodeInfo(nodeStatus)
 
-		go marlin.Run(marlinAddr, marlinTo, marlinFrom, isMarlinconnectionOutgoing, listenPortMarlin, true)
+		// TODO - is this style of invocation correct? can we wrap this? WAITGROUPS??? - v0.1 prerelease
+		go marlin.RunSpamFilterHandler(marlinUdsFile, marlinTo, marlinFrom)
 
-		invokeSpamFilter(nodeInfo["nodeType"].(chains.NodeType), rpcAddr, marlinTo, marlinFrom)
+		findAndRunSpamFilterHandler(nodeInfo["nodeType"].(chains.NodeType), rpcAddr, marlinTo, marlinFrom)
 	},
 }
 
@@ -56,8 +55,5 @@ func init() {
 	rootCmd.AddCommand(spamFilterCmd)
 	spamFilterCmd.Flags().StringVarP(&peerIP, "peerip", "p", "127.0.0.1", "Tendermint RPC IP address")
 	spamFilterCmd.Flags().IntVarP(&rpcPort, "rpcport", "r", 26657, "Tendermint Core rpc port")
-	spamFilterCmd.Flags().StringVarP(&marlinIP, "marlinip", "m", "127.0.0.1", "Marlin TCP Bridge IP address")
-	spamFilterCmd.Flags().IntVarP(&marlinPort, "marlinport", "n", 15003, "Marlin TCP Bridge IP port")
-	spamFilterCmd.Flags().BoolVarP(&isMarlinconnectionOutgoing, "marlindial", "e", false, "Connector DIALs Marlin if flag is set, otherwise connector LISTENs for connections")
-	spamFilterCmd.Flags().IntVarP(&listenPortMarlin, "listenportmarlin", "j", 59002, "Port on which Connector should listen for incoming connections from Marlin. Only applicable for Marlin side LISTEN mode.")
+	spamFilterCmd.Flags().StringVarP(&marlinUdsFile, "marlinudsfile", "u", "/tmp/tm.ipc", "Marlin UDS file location")
 }

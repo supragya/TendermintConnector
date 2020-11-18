@@ -21,15 +21,15 @@ import (
 	"net/http"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/supragya/tendermint_connector/types"
+	marlinTypes "github.com/supragya/tendermint_connector/types"
 
 	// Tendermint Core Chains
 	"github.com/supragya/tendermint_connector/chains"
 	"github.com/supragya/tendermint_connector/chains/irisnet"
 )
 
-var peerPort, rpcPort, marlinPort, listenPortPeer, listenPortMarlin int
-var peerIP, marlinIP, keyFile, chain, fileLocation string
+var peerPort, rpcPort, marlinPort, listenPortPeer int
+var peerIP, marlinIP, keyFile, chain, fileLocation, marlinUdsFile string
 var isConnectionOutgoing, isGenerate, isMarlinconnectionOutgoing bool
 
 func getRPCNodeStatus(rpcAddr string) (map[string]interface{}, error) {
@@ -68,34 +68,35 @@ func extractNodeInfo(rpcNodeStatus map[string]interface{}) map[string]interface{
 	}
 }
 
-func invokeTMHandler(node chains.NodeType,
+func findAndRunDataConnectHandler(node chains.NodeType,
 	peerAddr string,
-	marlinTo chan types.MarlinMessage,
-	marlinFrom chan types.MarlinMessage,
+	marlinTo chan marlinTypes.MarlinMessage,
+	marlinFrom chan marlinTypes.MarlinMessage,
 	isConnectionOutgoing bool,
 	keyFile string,
 	listenPortPeer int) {
-	log.Info("Trying to match ", node, " to available tendermint core handlers")
+	log.Info("Trying to match ", node, " to available TMCore Data Connect handlers")
 
 	switch node {
 	case irisnet.ServicedTMCore:
 		log.Info("Attaching Irisnet TM Handler to service given TM core")
-		irisnet.Run(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
+		irisnet.RunDataConnect(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
 	default:
 		log.Error("Cannot find any handler for ", node)
 		return
 	}
 }
 
-func invokeSpamFilter(node chains.NodeType,
+func findAndRunSpamFilterHandler(node chains.NodeType,
 	rpcAddr string,
-	marlinTo chan types.MarlinMessage,
-	marlinFrom chan types.MarlinMessage) {
-	log.Info("Trying to match ", node, " to available tendermint core spamfilters")
+	marlinTo chan marlinTypes.MarlinMessage,
+	marlinFrom chan marlinTypes.MarlinMessage) {
+	log.Info("Trying to match ", node, " to available TMCore Spamfilter handlers")
 
 	switch node {
 	case irisnet.ServicedTMCore:
 		log.Info("Attaching Irisnet TM spamfilter")
+		// TODO - Only one SpamFilter ?? should we spam more than one goroutine for this? Check if goroutine safe - v0.2 prerelease
 		irisnet.RunSpamFilter(rpcAddr, marlinTo, marlinFrom)
 	default:
 		log.Error("Cannot find any spamfilter for ", node)

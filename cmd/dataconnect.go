@@ -21,7 +21,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/supragya/tendermint_connector/types"
+	marlinTypes "github.com/supragya/tendermint_connector/types"
 
 	"github.com/supragya/tendermint_connector/marlin"
 
@@ -30,8 +30,8 @@ import (
 )
 
 // connectCmd represents the connect command
-var connectCmd = &cobra.Command{
-	Use:   "connect",
+var dataconnectCmd = &cobra.Command{
+	Use:   "dataconnect",
 	Short: "Act as a connector between TM Core and Marlin Relay",
 	Long:  `Act as a connector between TM Core and Marlin Relay`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -60,27 +60,26 @@ var connectCmd = &cobra.Command{
 		}
 
 		// Channels
-		marlinTo := make(chan types.MarlinMessage, 1000)
-		marlinFrom := make(chan types.MarlinMessage, 1000)
+		marlinTo := make(chan marlinTypes.MarlinMessage, 1000)
+		marlinFrom := make(chan marlinTypes.MarlinMessage, 1000)
 
 		nodeInfo := extractNodeInfo(nodeStatus)
 
-		go marlin.Run(marlinAddr, marlinTo, marlinFrom, isMarlinconnectionOutgoing, listenPortMarlin, false)
+		// TODO - is this style of invocation correct? can we wrap this? WAITGROUPS??? - v0.1 prerelease
+		go marlin.RunDataConnectHandler(marlinAddr, marlinTo, marlinFrom)
 
-		invokeTMHandler(nodeInfo["nodeType"].(chains.NodeType), peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
+		findAndRunDataConnectHandler(nodeInfo["nodeType"].(chains.NodeType), peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(connectCmd)
-	connectCmd.Flags().StringVarP(&peerIP, "peerip", "p", "127.0.0.1", "Tendermint Core IP address")
-	connectCmd.Flags().IntVarP(&peerPort, "connectport", "c", 26656, "Tendermint Core peer connection port")
-	connectCmd.Flags().IntVarP(&rpcPort, "rpcport", "r", 26657, "Tendermint Core rpc port")
-	connectCmd.Flags().StringVarP(&keyFile, "keyfile", "k", "", "KeyFile that Connector should use to connect to peer. If set, keypair in KeyFile will be used for all connections, else new KeyPair is generated on the fly.")
-	connectCmd.Flags().BoolVarP(&isConnectionOutgoing, "dial", "d", false, "Connector DIALs TMCore if flag is set, otherwise connector LISTENs for connections")
-	connectCmd.Flags().BoolVarP(&isMarlinconnectionOutgoing, "marlindial", "e", false, "Connector DIALs Marlin if flag is set, otherwise connector LISTENs for connections")
-	connectCmd.Flags().StringVarP(&marlinIP, "marlinip", "m", "127.0.0.1", "Marlin TCP Bridge IP address")
-	connectCmd.Flags().IntVarP(&marlinPort, "marlinport", "n", 15003, "Marlin TCP Bridge IP port")
-	connectCmd.Flags().IntVarP(&listenPortPeer, "listenportpeer", "l", 59001, "Port on which Connector should listen for incoming connections from peer. Only applicable for Peer side LISTEN mode.")
-	connectCmd.Flags().IntVarP(&listenPortMarlin, "listenportmarlin", "j", 59002, "Port on which Connector should listen for incoming connections from Marlin. Only applicable for Marlin side LISTEN mode.")
+	rootCmd.AddCommand(dataconnectCmd)
+	dataconnectCmd.Flags().StringVarP(&peerIP, "peerip", "i", "127.0.0.1", "Tendermint Core IP address")
+	dataconnectCmd.Flags().IntVarP(&peerPort, "peerport", "p", 26656, "Tendermint Core peer connection port")
+	dataconnectCmd.Flags().IntVarP(&rpcPort, "rpcport", "r", 26657, "Tendermint Core rpc port")
+	dataconnectCmd.Flags().StringVarP(&keyFile, "keyfile", "k", "", "KeyFile to use for connection")
+	dataconnectCmd.Flags().BoolVarP(&isConnectionOutgoing, "dial", "d", false, "Connector DIALs TMCore if flag is set, otherwise connector LISTENs for connections.")
+	dataconnectCmd.Flags().StringVarP(&marlinIP, "marlinip", "m", "127.0.0.1", "Marlin TCP Bridge IP address")
+	dataconnectCmd.Flags().IntVarP(&marlinPort, "marlinport", "n", 15003, "Marlin TCP Bridge IP port")
+	dataconnectCmd.Flags().IntVarP(&listenPortPeer, "listenportpeer", "l", 59001, "Port on which Connector should listen for incoming connections from peer. Only applicable for Peer side LISTEN mode.")
 }

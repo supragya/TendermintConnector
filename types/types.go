@@ -1,9 +1,10 @@
 package types
 
 type MarlinMessage struct {
-	ChainID uint32
-	Channel byte
-	Packets []PacketMsg
+	ChainID  uint32
+	Channel  byte        // ChannelID maps to TM channels for data tfr use, 0x01 for allow/0x00 for deny during spamcheck
+	PacketId uint64      // Used only for spam checks
+	Packets  []PacketMsg // Only available during data transfer
 }
 
 type PacketMsg struct {
