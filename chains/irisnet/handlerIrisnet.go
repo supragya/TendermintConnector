@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"runtime"
 	"strconv"
 	"time"
 	"encoding/hex"
@@ -47,7 +48,7 @@ func RunDataConnect(peerAddr string,
 	}
 
 	for {
-		handler, err := createTMHandler(peerAddr, "0.0.0.0:0", marlinTo, marlinFrom, isConnectionOutgoing, listenPort)
+		handler, err := createTMHandler(peerAddr, "0.0.0.0:0", marlinTo, marlinFrom, isConnectionOutgoing, listenPort, true)
 
 		if err != nil {
 			log.Error("Error encountered while creating TM Handler: ", err)
@@ -643,7 +644,7 @@ func RunSpamFilter(rpcAddr string,
 	marlinFrom chan marlinTypes.MarlinMessage) {
 	log.Info("Starting Irisnet Tendermint SpamFilter - 0.16.3-d83fc038-2-mainnet")
 
-	handler, err := createTMHandler("0.0.0.0:0", rpcAddr, marlinTo, marlinFrom, false, 0)
+	handler, err := createTMHandler("0.0.0.0:0", rpcAddr, marlinTo, marlinFrom, false, 0, false)
 	if err != nil {
 		log.Error("Error encountered while creating TM Handler: ", err)
 		os.Exit(1)
@@ -651,27 +652,33 @@ func RunSpamFilter(rpcAddr string,
 
 	marlin.AllowServicedChainMessages(handler.servicedChainId)
 
-	err = handler.beginServicingSpamFilter()
-	if err != nil {
-		log.Error("Error encountered while servicing spam filter: ", err)
-		os.Exit(1)
+	RegisterPacket(handler.codec)
+	RegisterConsensusMessages(handler.codec)
+
+	coreCount := runtime.NumCPU()
+	multiple := 2
+	log.Info("Runtime found number of CPUs on machine to be: ", coreCount, " running ", multiple*coreCount, " spamfilter handlers.")
+	
+	for i := 0; i < multiple*coreCount; i++ {
+		go handler.beginServicingSpamFilter(i)
 	}
+
+	go handler.throughput.presentThroughput(5, handler.signalShutThroughput)
 
 	// TODO - This is stopping just because of time sleep added. Remove this later on. - v0.1 prerelease
 	time.Sleep(100000000 * time.Second)
 }
 
-func (h *TendermintHandler) beginServicingSpamFilter() error {
-	log.Info("Running TM side spam filter")
+func (h *TendermintHandler) beginServicingSpamFilter(id int) {
+	log.Info("Running TM side spam filter handler ", id)
 	// Register Messages
-	RegisterPacket(h.codec)
-	RegisterConsensusMessages(h.codec)
 
 	// TODO - SpamFilter never has to consult RPC server currently - since only CsSt+ is supported, write for that. v0.2 prerelease
 
 	for msg := range h.marlinFrom {
 		switch msg.Channel {
 		case channelBc:
+			h.throughput.putInfo("spam", "-CsBc", 1)
 			log.Debug("TMCore <-> Marlin Blockhain is not serviced")
 			h.marlinTo <- h.spamVerdictMessage(msg, false)
 		case channelCsSt:
@@ -688,32 +695,38 @@ func (h *TendermintHandler) beginServicingSpamFilter() error {
 			}
 
 			if sendAhead {
+				h.throughput.putInfo("spam", "+CsSt", 1)
 				h.marlinTo <- h.spamVerdictMessage(msg, true)
 			} else {
+				h.throughput.putInfo("spam", "-CsSt", 1)
 				h.marlinTo <- h.spamVerdictMessage(msg, false)
 			}
 			h.marlinTo <- h.spamVerdictMessage(msg, false)
 		case channelCsDc:
+			h.throughput.putInfo("spam", "-CsDc", 1)
 			h.marlinTo <- h.spamVerdictMessage(msg, false)
 			log.Debug("TMCore <-> Marlin Consensensus Data Channel is not serviced")
 		case channelCsVo:
+			h.throughput.putInfo("spam", "-CsVo", 1)
 			h.marlinTo <- h.spamVerdictMessage(msg, false)
 			log.Debug("TMCore <-> Marlin Consensensus Vote Channel is not serviced")
 		case channelCsVs:
+			h.throughput.putInfo("spam", "-CsVs", 1)
 			h.marlinTo <- h.spamVerdictMessage(msg, false)
 			log.Debug("TMCore <-> Marlin Consensensus Vote Set Bits Channel is not serviced")
 		case channelMm:
+			h.throughput.putInfo("spam", "-CsMm", 1)
 			h.marlinTo <- h.spamVerdictMessage(msg, false)
 			log.Debug("TMCore <-> Marlin Mempool Channel is not serviced")
 		case channelEv:
+			h.throughput.putInfo("spam", "-CsEv", 1)
 			h.marlinTo <- h.spamVerdictMessage(msg, false)
 			log.Debug("TMCore <-> MarlinEvidence Channel is not serviced")
 		default:
+			h.throughput.putInfo("spam", "-UnkUNK", 1)
 			h.marlinTo <- h.spamVerdictMessage(msg, false)
 		}
 	}
-
-	return nil
 }
 
 func (h *TendermintHandler) spamVerdictMessage(msg marlinTypes.MarlinMessage, allow bool) marlinTypes.MarlinMessage {
@@ -840,7 +853,8 @@ func createTMHandler(peerAddr string,
 	marlinTo chan marlinTypes.MarlinMessage,
 	marlinFrom chan marlinTypes.MarlinMessage,
 	isConnectionOutgoing bool,
-	listenPort int) (TendermintHandler, error) {
+	listenPort int,
+	isDataConnect bool) (TendermintHandler, error) {
 	chainId, ok := marlinTypes.ServicedChains["irisnet-0.16.3-mainnet"]
 	if !ok {
 		return TendermintHandler{}, errors.New("Cannot find irisnet-0.16.3-mainnet in list of serviced chains by marlin connector")
@@ -860,8 +874,10 @@ func createTMHandler(peerAddr string,
 		marlinFrom:           marlinFrom,
 		channelBuffer:        make(map[byte][]marlinTypes.PacketMsg),
 		throughput: throughPutData{
+			isDataConnect: isDataConnect,
 			toTMCore:   make(map[string]uint32),
 			fromTMCore: make(map[string]uint32),
+			spam:		make(map[string]uint32),
 		},
 		signalConnError:      make(chan struct{}, 1),
 		signalShutSend:       make(chan struct{}, 1),
@@ -877,6 +893,8 @@ func (t *throughPutData) putInfo(direction string, key string, count uint32) {
 		t.toTMCore[key] = t.toTMCore[key] + count
 	case "from":
 		t.fromTMCore[key] = t.fromTMCore[key] + count
+	case "spam":
+		t.spam[key] = t.spam[key] + count
 	}
 	t.mu.Unlock()
 }
@@ -891,10 +909,14 @@ func (t *throughPutData) presentThroughput(sec time.Duration, shutdownCh chan st
 		default:
 		}
 		t.mu.Lock()
-		log.Info(fmt.Sprintf("[Transfer stats] To TMCore %v\tFrom TMCore %v", t.toTMCore, t.fromTMCore))
-
+		if t.isDataConnect {
+			log.Info(fmt.Sprintf("[DataConnect stats] To TMCore %v\tFrom TMCore %v", t.toTMCore, t.fromTMCore))
+		} else {
+			log.Info(fmt.Sprintf("[SpamFilter stats] Served %v", t.spam))
+		}
 		t.toTMCore = make(map[string]uint32)
 		t.fromTMCore = make(map[string]uint32)
+		t.spam = make(map[string]uint32)
 		t.mu.Unlock()
 	}
 }

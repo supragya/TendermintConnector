@@ -33,8 +33,10 @@ type TendermintHandler struct {
 }
 
 type throughPutData struct {
+	isDataConnect bool
 	toTMCore   map[string]uint32
 	fromTMCore map[string]uint32
+	spam	   map[string]uint32
 	mu         sync.Mutex
 }
 

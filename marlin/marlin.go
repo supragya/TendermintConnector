@@ -321,7 +321,11 @@ func (h *MarlinHandler) sendRoutineSpamFilter() {
 			continue
 		}
 
-		log.Info("Got spam check results as: ", msg.PacketId, " ", msg.Channel)
+		// if msg.Channel == byte(0x01) {
+		// 	log.Debug("+++++++Allowing: ", msg.PacketId, " ", msg.Channel)
+		// } else {
+		// 	log.Debug("Disallowing----: ", msg.PacketId, " ", msg.Channel)
+		// }
 		binary.BigEndian.PutUint64(messageId, uint64(msg.PacketId))
 		encodedData := append(messageId, msg.Channel)
 		// msg.Channel is byte(0x00) from TMCore handler if message is marked spam
@@ -376,8 +380,6 @@ func (h *MarlinHandler) recvRoutineSpamFilter() {
 		messageId := binary.BigEndian.Uint64(partialId)
 		messageLen := binary.BigEndian.Uint64(partialLen)
 
-		log.Info("Recieved for check marlinside: ", messageId, " len ", messageLen, " ", partialId, " ", partialLen)
-
 		var buffer = make([]byte, messageLen)
 		n, err = io.ReadFull(h.marlinConn, buffer)
 		if err != nil {
@@ -398,7 +400,6 @@ func (h *MarlinHandler) recvRoutineSpamFilter() {
 				PacketId: messageId,
 			}
 		} else {
-			log.Info("proto3 deciphering was good: ", tmMessage)
 			if tmMessage.GetChainId() == currentlyServicing && messageLen > 0 {
 				internalPackets := []marlinTypes.PacketMsg{}
 				for _, pkt := range tmMessage.GetPackets() {
@@ -416,7 +417,6 @@ func (h *MarlinHandler) recvRoutineSpamFilter() {
 				}
 				select {
 				case h.marlinFrom <- message:
-					log.Info("Pushed it to TM for checks")
 				default:
 					log.Warning("Too many messages in channel marlinFrom. Dropping oldest messags")
 					_ = <-h.marlinFrom
