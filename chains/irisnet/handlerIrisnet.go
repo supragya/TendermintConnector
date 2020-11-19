@@ -2,6 +2,7 @@ package irisnet
 
 import (
 	"bufio"
+	// "bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"time"
 	"encoding/hex"
 	"encoding/json"
+	b64 "encoding/base64"
 	"net/http"
 	"io/ioutil"
 
@@ -765,61 +767,83 @@ func (h *TendermintHandler) beginServicingSpamFilter(id int) {
 func (h *TendermintHandler) thoroughMessageCheck(msg ConsensusMessage) bool {
 	switch msg.(type) {
 	case *VoteMessage:
-		log.Debug("Found vote: ", msg.(*VoteMessage).Vote)
 		if validator, ok := h.getValidators(msg.(*VoteMessage).Vote.Height); ok {
-			if msg.(*VoteMessage).Vote.ValidatorAddress.String() != validator[msg.(*VoteMessage).Vote.ValidatorIndex] {
+			vidx := msg.(*VoteMessage).Vote.ValidatorIndex
+			vaddr := msg.(*VoteMessage).Vote.ValidatorAddress.String()
+			if vidx >= len(validator) || vaddr != validator[vidx].Address ||
+			   !validator[vidx].PublicKey.VerifyBytes(msg.(*VoteMessage).Vote.SignBytes("irishub", h.codec), msg.(*VoteMessage).Vote.Signature) {
 				return false
 			}
-			// Check signature
 			return true
 		}
 		return false
 	case *BlockPartMessage:
-		// Merkle Proof verification
+		// Cache hash verification, needs Proposal message support
 		return false
 	case *ProposalMessage:
-		// Check signature
+		// if _, ok := h.getValidators(msg.(*ProposalMessage).Proposal.Height); ok {
+		// 	// Check signature, add to map so that BPM messages can be verified
+		// 	return true
+		// }
 		return false
 	default:
 		return false
 	}
 }
 
-func (h *TendermintHandler) getValidators(height int64) ([]string, bool) {
+func (vote *Vote) SignBytes(chainID string, cdc *amino.Codec) []byte {
+	bz, err := cdc.MarshalBinaryLengthPrefixed(CanonicalizeVote(chainID, vote))
+	if err != nil {
+		panic(err)
+	}
+	return bz
+}
+
+func (h *TendermintHandler) getValidators(height int64) ([]Validator, bool) {
 	if height+10 < h.maxValidHeight {
 		// Don't service messages too old
-		return []string{}, false
+		return []Validator{}, false
 	} else if h.validatorCache.Contains(height) {
 		value, ok := h.validatorCache.Get(height)
-		return value.([]string), ok
+		return value.([]Validator), ok
 	} else {
 		// log.Info("Asked about height: ", height)
 		response, err := http.Get("http://"+h.rpcAddr+"/validators?height="+strconv.Itoa((int)(height)))
 		defer response.Body.Close()
 		if err != nil {
 			log.Error("Error while sending request to get validators at height: ", height, " err: ", err)
-			return []string{}, false
+			return []Validator{}, false
 		} else {
 			bodyBytes, err := ioutil.ReadAll(response.Body)
 			if err != nil {
 				log.Error("Error while parsing request to get validators at height: ", height, " err: ", err)
-				return []string{}, false
+				return []Validator{}, false
 			}
 			var jsonResult map[string]interface{}
 			json.Unmarshal(bodyBytes, &jsonResult)
 			// verify interface for errors
 			if _, errorFieldFound := jsonResult["error"]; errorFieldFound {
-				return []string{}, false
+				return []Validator{}, false
 			}
 			validatorInfo := jsonResult["result"].(map[string]interface{})["validators"].([]interface{})
 
-			var validatorSet []string
+			var validatorSet []Validator
 			for _, v := range(validatorInfo) {
 				if v.(map[string]interface{})["pub_key"].(map[string]interface{})["type"] != "tendermint/PubKeyEd25519" {
 					log.Error("Not all keys of validators are tendermint/PubKeyEd25519. Cannot continue with this validator set from TMCore")
-					return []string{}, false
+					return []Validator{}, false
 				}
-				validatorSet = append(validatorSet, v.(map[string]interface{})["address"].(string))
+				decodedSlice, err := b64.StdEncoding.DecodeString(v.(map[string]interface{})["pub_key"].(map[string]interface{})["value"].(string))
+				if err != nil {
+					return []Validator{}, false
+				}
+				var decodedArray [32]byte
+				copy(decodedArray[:], decodedSlice[:32])
+				validatorSet = append(validatorSet, 
+					Validator{
+						PublicKey: ed25519.PubKeyEd25519(decodedArray), 
+						Address: v.(map[string]interface{})["address"].(string),
+					})
 			}
 			h.validatorCache.Add(height, validatorSet)
 			
@@ -1026,3 +1050,88 @@ func (t *throughPutData) presentThroughput(sec time.Duration, shutdownCh chan st
 		t.mu.Unlock()
 	}
 }
+
+
+// --- EXTRAS
+
+
+// Canonical* wraps the structs in types for amino encoding them for use in SignBytes / the Signable interface.
+// TimeFormat is used for generating the sigs
+// const TimeFormat = time.RFC3339Nano
+
+type CanonicalBlockID struct {
+	Hash        cmn.HexBytes
+	PartsHeader CanonicalPartSetHeader
+}
+
+type CanonicalPartSetHeader struct {
+	Hash  cmn.HexBytes
+	Total int
+}
+
+type CanonicalProposal struct {
+	Type      byte // type alias for byte
+	Height    int64         `binary:"fixed64"`
+	Round     int64         `binary:"fixed64"`
+	POLRound  int64         `binary:"fixed64"`
+	BlockID   CanonicalBlockID
+	Timestamp time.Time
+	ChainID   string
+}
+
+type CanonicalVote struct {
+	Type      byte // type alias for byte
+	Height    int64         `binary:"fixed64"`
+	Round     int64         `binary:"fixed64"`
+	BlockID   CanonicalBlockID
+	Timestamp time.Time
+	ChainID   string
+}
+
+//-----------------------------------
+// Canonicalize the structs
+
+func CanonicalizeBlockID(blockID BlockID) CanonicalBlockID {
+	return CanonicalBlockID{
+		Hash:        blockID.Hash,
+		PartsHeader: CanonicalizePartSetHeader(blockID.PartsHeader),
+	}
+}
+
+func CanonicalizePartSetHeader(psh PartSetHeader) CanonicalPartSetHeader {
+	return CanonicalPartSetHeader{
+		psh.Hash,
+		psh.Total,
+	}
+}
+
+func CanonicalizeProposal(chainID string, proposal *Proposal) CanonicalProposal {
+	return CanonicalProposal{
+		Type:      byte(0x20),
+		Height:    proposal.Height,
+		Round:     int64(proposal.Round), // cast int->int64 to make amino encode it fixed64 (does not work for int)
+		POLRound:  int64(proposal.POLRound),
+		BlockID:   CanonicalizeBlockID(proposal.BlockID),
+		Timestamp: proposal.Timestamp,
+		ChainID:   chainID,
+	}
+}
+
+func CanonicalizeVote(chainID string, vote *Vote) CanonicalVote {
+	return CanonicalVote{
+		Type:      vote.Type,
+		Height:    vote.Height,
+		Round:     int64(vote.Round), // cast int->int64 to make amino encode it fixed64 (does not work for int)
+		Timestamp: vote.Timestamp,
+		BlockID:   CanonicalizeBlockID(vote.BlockID),
+		ChainID:   chainID,
+	}
+}
+
+// // CanonicalTime can be used to stringify time in a canonical way.
+// func CanonicalTime(t time.Time) string {
+// 	// Note that sending time over amino resets it to
+// 	// local time, we need to force UTC here, so the
+// 	// signatures match
+// 	return tmtime.Canonical(t).Format(TimeFormat)
+// }

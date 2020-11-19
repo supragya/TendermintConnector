@@ -51,3 +51,8 @@ type keyData struct {
 	PrivateKey       [64]byte
 	PublicKey        [32]byte
 }
+
+type Validator struct {
+	PublicKey	ed25519.PubKeyEd25519
+	Address		string
+}
