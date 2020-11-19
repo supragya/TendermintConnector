@@ -21,7 +21,7 @@ type TendermintHandler struct {
 	codec                *amino.Codec
 	baseConnection       net.Conn
 	validatorCache		 *lru.TwoQueueCache
-	maxValidHeight 			int
+	maxValidHeight 			int64
 	secretConnection     *conn.SecretConnection
 	marlinTo             chan marlinTypes.MarlinMessage
 	marlinFrom           chan marlinTypes.MarlinMessage
@@ -50,9 +50,4 @@ type keyData struct {
 	PublicKeyString  string
 	PrivateKey       [64]byte
 	PublicKey        [32]byte
-}
-
-type Validator struct {
-	Id	int
-	PublicKey	string
 }

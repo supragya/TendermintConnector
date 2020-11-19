@@ -766,12 +766,19 @@ func (h *TendermintHandler) thoroughMessageCheck(msg ConsensusMessage) bool {
 	switch msg.(type) {
 	case *VoteMessage:
 		log.Debug("Found vote: ", msg.(*VoteMessage).Vote)
-		validators, _ := h.getValidators(msg.(*VoteMessage).Vote.Height)
-		_ = validators
-		return true
+		if validator, ok := h.getValidators(msg.(*VoteMessage).Vote.Height); ok {
+			if msg.(*VoteMessage).Vote.ValidatorAddress.String() != validator[msg.(*VoteMessage).Vote.ValidatorIndex] {
+				return false
+			}
+			// Check signature
+			return true
+		}
+		return false
 	case *BlockPartMessage:
+		// Merkle Proof verification
 		return false
 	case *ProposalMessage:
+		// Check signature
 		return false
 	default:
 		return false
@@ -779,7 +786,10 @@ func (h *TendermintHandler) thoroughMessageCheck(msg ConsensusMessage) bool {
 }
 
 func (h *TendermintHandler) getValidators(height int64) ([]string, bool) {
-	if h.validatorCache.Contains(height) {
+	if height+10 < h.maxValidHeight {
+		// Don't service messages too old
+		return []string{}, false
+	} else if h.validatorCache.Contains(height) {
 		value, ok := h.validatorCache.Get(height)
 		return value.([]string), ok
 	} else {
@@ -809,14 +819,14 @@ func (h *TendermintHandler) getValidators(height int64) ([]string, bool) {
 					log.Error("Not all keys of validators are tendermint/PubKeyEd25519. Cannot continue with this validator set from TMCore")
 					return []string{}, false
 				}
-				validatorSet = append(validatorSet, v.(map[string]interface{})["pub_key"].(map[string]interface{})["value"].(string))
+				validatorSet = append(validatorSet, v.(map[string]interface{})["address"].(string))
 			}
 			h.validatorCache.Add(height, validatorSet)
 			
+			h.maxValidHeight = height
 			return validatorSet, true
 		}
 	}
-	return []string{}, false // TODO - Remove this
 }
 
 func (h *TendermintHandler) spamVerdictMessage(msg marlinTypes.MarlinMessage, allow bool) marlinTypes.MarlinMessage {
