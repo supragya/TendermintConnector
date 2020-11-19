@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	amino "github.com/tendermint/go-amino"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/supragya/tendermint_connector/chains/irisnet/conn"
 	marlinTypes "github.com/supragya/tendermint_connector/types"
@@ -19,6 +20,8 @@ type TendermintHandler struct {
 	privateKey           ed25519.PrivKeyEd25519
 	codec                *amino.Codec
 	baseConnection       net.Conn
+	validatorCache		 *lru.TwoQueueCache
+	maxValidHeight 			int
 	secretConnection     *conn.SecretConnection
 	marlinTo             chan marlinTypes.MarlinMessage
 	marlinFrom           chan marlinTypes.MarlinMessage
@@ -47,4 +50,9 @@ type keyData struct {
 	PublicKeyString  string
 	PrivateKey       [64]byte
 	PublicKey        [32]byte
+}
+
+type Validator struct {
+	Id	int
+	PublicKey	string
 }

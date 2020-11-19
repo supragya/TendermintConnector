@@ -10,6 +10,7 @@ require (
 	github.com/go-logfmt/logfmt v0.5.0
 	github.com/gogo/protobuf v1.3.1
 	github.com/golang/protobuf v1.4.3
+	github.com/hashicorp/golang-lru v0.5.1
 	github.com/libp2p/go-buffer-pool v0.0.2
 	github.com/magiconair/properties v1.8.4 // indirect
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d

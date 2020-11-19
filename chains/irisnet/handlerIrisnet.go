@@ -13,9 +13,11 @@ import (
 	"time"
 	"encoding/hex"
 	"encoding/json"
+	"net/http"
 	"io/ioutil"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/hashicorp/golang-lru"
 	"github.com/supragya/tendermint_connector/chains"
 	"github.com/supragya/tendermint_connector/chains/irisnet/conn"
 	cmn "github.com/supragya/tendermint_connector/chains/irisnet/libs/common"
@@ -657,16 +659,13 @@ func RunSpamFilter(rpcAddr string,
 
 	coreCount := runtime.NumCPU()
 	multiple := 2
-	log.Info("Runtime found number of CPUs on machine to be: ", coreCount, " running ", multiple*coreCount, " spamfilter handlers.")
+	log.Info("Runtime found number of CPUs on machine to be ", coreCount, ". Hence, running ", multiple*coreCount, " spamfilter handlers.")
 	
 	for i := 0; i < multiple*coreCount; i++ {
 		go handler.beginServicingSpamFilter(i)
 	}
 
-	go handler.throughput.presentThroughput(5, handler.signalShutThroughput)
-
-	// TODO - This is stopping just because of time sleep added. Remove this later on. - v0.1 prerelease
-	time.Sleep(100000000 * time.Second)
+	handler.throughput.presentThroughput(5, handler.signalShutThroughput)
 }
 
 func (h *TendermintHandler) beginServicingSpamFilter(id int) {
@@ -675,58 +674,149 @@ func (h *TendermintHandler) beginServicingSpamFilter(id int) {
 
 	// TODO - SpamFilter never has to consult RPC server currently - since only CsSt+ is supported, write for that. v0.2 prerelease
 
-	for msg := range h.marlinFrom {
-		switch msg.Channel {
+	for marlinMsg := range h.marlinFrom {
+		switch marlinMsg.Channel {
 		case channelBc:
 			h.throughput.putInfo("spam", "-CsBc", 1)
 			log.Debug("TMCore <-> Marlin Blockhain is not serviced")
-			h.marlinTo <- h.spamVerdictMessage(msg, false)
+			h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
 		case channelCsSt:
-			// Construct complete message from packets
-			var sendAhead = true
-
-			// Unmarshalling Test
-			for _, pkt := range msg.Packets {
-				var cmsg ConsensusMessage
-				err := h.codec.UnmarshalBinaryBare(pkt.Bytes, &cmsg)
-				if err != nil {
-					sendAhead = false
+			msg, err := h.decodeConsensusMsgFromChannelBuffer(marlinMsg.Packets)
+			if err != nil {
+				h.throughput.putInfo("spam", "-CsStUNK", uint32(len(marlinMsg.Packets)))
+				h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
+			} else {
+				switch msg.(type) {
+				case *NewRoundStepMessage:
+					h.throughput.putInfo("spam", "+CsStNRS", uint32(len(marlinMsg.Packets)))
+					h.marlinTo <- h.spamVerdictMessage(marlinMsg, true)
+				default:
+					h.throughput.putInfo("spam", "-CsStUNK", uint32(len(marlinMsg.Packets)))
+					h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
 				}
 			}
-
-			if sendAhead {
-				h.throughput.putInfo("spam", "+CsSt", 1)
-				h.marlinTo <- h.spamVerdictMessage(msg, true)
-			} else {
-				h.throughput.putInfo("spam", "-CsSt", 1)
-				h.marlinTo <- h.spamVerdictMessage(msg, false)
-			}
-			h.marlinTo <- h.spamVerdictMessage(msg, false)
-		case channelCsDc:
-			h.throughput.putInfo("spam", "-CsDc", 1)
-			h.marlinTo <- h.spamVerdictMessage(msg, false)
-			log.Debug("TMCore <-> Marlin Consensensus Data Channel is not serviced")
 		case channelCsVo:
-			h.throughput.putInfo("spam", "-CsVo", 1)
-			h.marlinTo <- h.spamVerdictMessage(msg, false)
-			log.Debug("TMCore <-> Marlin Consensensus Vote Channel is not serviced")
+			msg, err := h.decodeConsensusMsgFromChannelBuffer(marlinMsg.Packets)
+			if err != nil {
+				h.throughput.putInfo("spam", "-CsVoUNK", uint32(len(marlinMsg.Packets)))
+				h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
+			} else {
+				switch msg.(type) {
+				case *VoteMessage:
+					if h.thoroughMessageCheck(msg) {
+						h.marlinTo <- h.spamVerdictMessage(marlinMsg, true)
+						h.throughput.putInfo("spam", "+CsVoVOT", uint32(len(marlinMsg.Packets)))
+					} else {
+						h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
+						h.throughput.putInfo("spam", "-CsVoVOT", uint32(len(marlinMsg.Packets)))
+					}
+				default:
+					h.throughput.putInfo("spam", "-CsVoUNK", uint32(len(marlinMsg.Packets)))
+					h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
+				}
+			}
+		case channelCsDc:
+			msg, err := h.decodeConsensusMsgFromChannelBuffer(marlinMsg.Packets)
+			if err != nil {
+				h.throughput.putInfo("spam", "-CsDcUNK", uint32(len(marlinMsg.Packets)))
+				h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
+			} else {
+				switch msg.(type) {
+				case *ProposalMessage:
+					if h.thoroughMessageCheck(msg) {
+						h.marlinTo <- h.spamVerdictMessage(marlinMsg, true)
+						h.throughput.putInfo("spam", "+CsDcPRO", uint32(len(marlinMsg.Packets)))
+					} else {
+						h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
+						h.throughput.putInfo("spam", "-CsDcPRO", uint32(len(marlinMsg.Packets)))
+					}
+				case *BlockPartMessage:
+					if h.thoroughMessageCheck(msg) {
+						h.marlinTo <- h.spamVerdictMessage(marlinMsg, true)
+						h.throughput.putInfo("spam", "+CsDcBPM", uint32(len(marlinMsg.Packets)))
+					} else {
+						h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
+						h.throughput.putInfo("spam", "-CsDcBPM", uint32(len(marlinMsg.Packets)))
+					}
+				default:
+					h.throughput.putInfo("spam", "-CsVoUNK", uint32(len(marlinMsg.Packets)))
+					h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
+				}
+			}
 		case channelCsVs:
 			h.throughput.putInfo("spam", "-CsVs", 1)
-			h.marlinTo <- h.spamVerdictMessage(msg, false)
+			h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
 			log.Debug("TMCore <-> Marlin Consensensus Vote Set Bits Channel is not serviced")
 		case channelMm:
 			h.throughput.putInfo("spam", "-CsMm", 1)
-			h.marlinTo <- h.spamVerdictMessage(msg, false)
+			h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
 			log.Debug("TMCore <-> Marlin Mempool Channel is not serviced")
 		case channelEv:
 			h.throughput.putInfo("spam", "-CsEv", 1)
-			h.marlinTo <- h.spamVerdictMessage(msg, false)
+			h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
 			log.Debug("TMCore <-> MarlinEvidence Channel is not serviced")
 		default:
 			h.throughput.putInfo("spam", "-UnkUNK", 1)
-			h.marlinTo <- h.spamVerdictMessage(msg, false)
+			h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
 		}
 	}
+}
+
+func (h *TendermintHandler) thoroughMessageCheck(msg ConsensusMessage) bool {
+	switch msg.(type) {
+	case *VoteMessage:
+		log.Debug("Found vote: ", msg.(*VoteMessage).Vote)
+		validators, _ := h.getValidators(msg.(*VoteMessage).Vote.Height)
+		_ = validators
+		return true
+	case *BlockPartMessage:
+		return false
+	case *ProposalMessage:
+		return false
+	default:
+		return false
+	}
+}
+
+func (h *TendermintHandler) getValidators(height int64) ([]string, bool) {
+	if h.validatorCache.Contains(height) {
+		value, ok := h.validatorCache.Get(height)
+		return value.([]string), ok
+	} else {
+		// log.Info("Asked about height: ", height)
+		response, err := http.Get("http://"+h.rpcAddr+"/validators?height="+strconv.Itoa((int)(height)))
+		defer response.Body.Close()
+		if err != nil {
+			log.Error("Error while sending request to get validators at height: ", height, " err: ", err)
+			return []string{}, false
+		} else {
+			bodyBytes, err := ioutil.ReadAll(response.Body)
+			if err != nil {
+				log.Error("Error while parsing request to get validators at height: ", height, " err: ", err)
+				return []string{}, false
+			}
+			var jsonResult map[string]interface{}
+			json.Unmarshal(bodyBytes, &jsonResult)
+			// verify interface for errors
+			if _, errorFieldFound := jsonResult["error"]; errorFieldFound {
+				return []string{}, false
+			}
+			validatorInfo := jsonResult["result"].(map[string]interface{})["validators"].([]interface{})
+
+			var validatorSet []string
+			for _, v := range(validatorInfo) {
+				if v.(map[string]interface{})["pub_key"].(map[string]interface{})["type"] != "tendermint/PubKeyEd25519" {
+					log.Error("Not all keys of validators are tendermint/PubKeyEd25519. Cannot continue with this validator set from TMCore")
+					return []string{}, false
+				}
+				validatorSet = append(validatorSet, v.(map[string]interface{})["pub_key"].(map[string]interface{})["value"].(string))
+			}
+			h.validatorCache.Add(height, validatorSet)
+			
+			return validatorSet, true
+		}
+	}
+	return []string{}, false // TODO - Remove this
 }
 
 func (h *TendermintHandler) spamVerdictMessage(msg marlinTypes.MarlinMessage, allow bool) marlinTypes.MarlinMessage {
@@ -862,6 +952,11 @@ func createTMHandler(peerAddr string,
 
 	privateKey := getPrivateKey()
 
+	vCache, err := lru.New2Q(500)
+	if err != nil {
+		return TendermintHandler{}, err
+	}
+
 	return TendermintHandler{
 		servicedChainId:      chainId,
 		listenPort:           listenPort,
@@ -870,6 +965,7 @@ func createTMHandler(peerAddr string,
 		rpcAddr:              rpcAddr,
 		privateKey:           privateKey,
 		codec:                amino.NewCodec(),
+		validatorCache:		  vCache,
 		marlinTo:             marlinTo,
 		marlinFrom:           marlinFrom,
 		channelBuffer:        make(map[byte][]marlinTypes.PacketMsg),
