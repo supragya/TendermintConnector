@@ -26,6 +26,7 @@ import (
 	// Tendermint Core Chains
 	"github.com/supragya/tendermint_connector/chains"
 	"github.com/supragya/tendermint_connector/chains/irisnet"
+	"github.com/supragya/tendermint_connector/chains/cosmos"
 )
 
 var peerPort, rpcPort, marlinPort, listenPortPeer int
@@ -81,6 +82,9 @@ func findAndRunDataConnectHandler(node chains.NodeType,
 	case irisnet.ServicedTMCore:
 		log.Info("Attaching Irisnet TM Handler to service given TM core")
 		irisnet.RunDataConnect(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
+	case cosmos.ServicedTMCore:
+		log.Info("Attaching Cosmos-3 TM Handler to service given TM core")
+		cosmos.RunDataConnect(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
 	default:
 		log.Error("Cannot find any handler for ", node)
 		return
@@ -96,8 +100,10 @@ func findAndRunSpamFilterHandler(node chains.NodeType,
 	switch node {
 	case irisnet.ServicedTMCore:
 		log.Info("Attaching Irisnet TM spamfilter")
-		// TODO - Only one SpamFilter ?? should we spam more than one goroutine for this? Check if goroutine safe - v0.2 prerelease
 		irisnet.RunSpamFilter(rpcAddr, marlinTo, marlinFrom)
+	case cosmos.ServicedTMCore:
+		log.Info("Attaching Cosmos-3 TM spamfilter")
+		cosmos.RunSpamFilter(rpcAddr, marlinTo, marlinFrom)
 	default:
 		log.Error("Cannot find any spamfilter for ", node)
 		return
