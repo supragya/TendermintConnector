@@ -8,6 +8,7 @@ Tendermint Connector is a bridging application required for Tendermint based blo
 ## Serviced Blockchains
 Currently, the following blockchains are serviced by **tendermint_connector**:
 1. Irisnet Mainnet 0.16.3
+2. Cosmos-3 Mainnet (WIP)
 
 ## Building the application
 Ensure that go is installed on the build system - ensure all is good using `go version`. This should return good version string. Proceed to build the application using:
@@ -43,6 +44,7 @@ Decision of which peer side connector to use is done during runtime and is based
 
 Currently, there is only one peer side connector written and supported:
 1. Irisnet Mainnet 0.16.3
+2. Cosmos-3 Mainnet
 
 ### Peer side connector TCP connections
 TMCore peers communicate with each other on TCP connections. Hence, if communication is to be established with real TMCore, one must dial the real TMCore or "be dialed" by the other side. Tendermint Core can do both - dial a real TMCore or be dialed. 
