@@ -142,11 +142,11 @@ func (h *TendermintHandler) handshake() error {
 	var (
 		errc                        = make(chan error, 2)
 		ourNodeInfo DefaultNodeInfo = DefaultNodeInfo{
-			ProtocolVersion{App: 2, Block: 9, P2P: 5},
+			ProtocolVersion{App: 0, Block: 10, P2P: 7},
 			string(hex.EncodeToString(h.privateKey.PubKey().Address())),
 			"tcp://127.0.0.1:20006", //TODO Correct this - v0.2 prerelease
-			"irishub",
-			"0.32.2",
+			"cosmoshub-3",
+			"0.32.13",
 			[]byte{channelBc, channelCsSt, channelCsDc, channelCsVo,
 				channelCsVs, channelMm, channelEv},
 			"marlin-tendermint-connector",
