@@ -17,4 +17,5 @@ type PacketMsg struct {
 // These are vital for encoding / decoding to correct chains.
 var ServicedChains = map[string]uint32{
 	"irisnet-0.16.3-mainnet": 1,
+	"cosmos-3-mainnet": 2,
 }

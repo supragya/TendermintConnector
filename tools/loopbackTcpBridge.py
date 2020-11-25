@@ -4,7 +4,7 @@ import sys
 # Create a TCP/IP socket
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-server_address = ('localhost', 15006)
+server_address = ('localhost', 15003)
 sock.bind(server_address)
 
 sock.listen(1)
@@ -30,3 +30,10 @@ while True:
         # Clean up the connection
         connection.close()
 
+# Updates:
+# - MarlinCTL: updated for IRISHUB support
+# - Iris Full node: shifted from GCP to AWS (syncing)
+# - Cosmos Full node: created on AWS (syncing)
+# - TendermintConnector: Basic interfacing and handshake with cosmoshub-3 node successful, waiting for node to catch up to check for message deliveries
+# - Iris stakedrop: To start today
+# - Build-Automation: needs a few changes to support keyfiles

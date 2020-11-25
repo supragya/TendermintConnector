@@ -44,7 +44,7 @@ func RunDataConnect(peerAddr string,
 	isConnectionOutgoing bool,
 	keyFile string,
 	listenPort int) {
-	log.Info("Starting Irisnet Tendermint Core Handler - 0.16.3-d83fc038-2-mainnet")
+	log.Info("Starting Cosmos-3 Tendermint Core Handler - mainnet")
 
 	if keyFile != "" {
 		isKeyFileUsed = true
@@ -210,7 +210,7 @@ func (h *TendermintHandler) beginServicing() error {
 	go h.recvRoutine()
 	go h.throughput.presentThroughput(5, h.signalShutThroughput)
 
-	// Allow Irisnet messages from marlin Relay
+	// Allow cosmos3 messages from marlin Relay
 	marlin.AllowServicedChainMessages(h.servicedChainId)
 	return nil
 }
@@ -646,7 +646,7 @@ func (c *P2PConnection) stopPongTimer() {
 func RunSpamFilter(rpcAddr string,
 	marlinTo chan marlinTypes.MarlinMessage,
 	marlinFrom chan marlinTypes.MarlinMessage) {
-	log.Info("Starting Irisnet Tendermint SpamFilter - 0.16.3-d83fc038-2-mainnet")
+	log.Info("Starting Cosmos3 Tendermint SpamFilter - 0.16.3-d83fc038-2-mainnet")
 
 	handler, err := createTMHandler("0.0.0.0:0", rpcAddr, marlinTo, marlinFrom, false, 0, false)
 	if err != nil {
@@ -771,7 +771,7 @@ func (h *TendermintHandler) thoroughMessageCheck(msg ConsensusMessage) bool {
 			vidx := msg.(*VoteMessage).Vote.ValidatorIndex
 			vaddr := msg.(*VoteMessage).Vote.ValidatorAddress.String()
 			if vidx >= len(validator) || vaddr != validator[vidx].Address ||
-			   !validator[vidx].PublicKey.VerifyBytes(msg.(*VoteMessage).Vote.SignBytes("irishub", h.codec), msg.(*VoteMessage).Vote.Signature) {
+			   !validator[vidx].PublicKey.VerifyBytes(msg.(*VoteMessage).Vote.SignBytes("cosmoshub-3", h.codec), msg.(*VoteMessage).Vote.Signature) {
 				return false
 			}
 			return true
@@ -871,19 +871,19 @@ func (h *TendermintHandler) spamVerdictMessage(msg marlinTypes.MarlinMessage, al
 
 // ---------------------- KEY GENERATION INTERFACE -----------------------------
 
-var ServicedKeyFile string = "irisnet"
+var ServicedKeyFile string = "cosmos-3"
 var isKeyFileUsed, memoized bool
 var keyFileLocation string
 var privateKey ed25519.PrivKeyEd25519
 
 func GenerateKeyFile(fileLocation string) {
-	log.Info("Generating KeyPair for irisnet-0.16.3-mainnet")
+	log.Info("Generating KeyPair for cosmos-3-mainnet")
 
 	privateKey := ed25519.GenPrivKey()
 	publicKey := privateKey.PubKey()
 
 	key := keyData{
-		Chain:            "irisnet-0.16.3-mainnet",
+		Chain:            "cosmos-3-mainnet",
 		IdString:         string(hex.EncodeToString(publicKey.Address())),
 		PrivateKeyString: string(hex.EncodeToString(privateKey[:])),
 		PublicKeyString:  string(hex.EncodeToString(publicKey.Bytes())),
@@ -979,9 +979,9 @@ func createTMHandler(peerAddr string,
 	isConnectionOutgoing bool,
 	listenPort int,
 	isDataConnect bool) (TendermintHandler, error) {
-	chainId, ok := marlinTypes.ServicedChains["irisnet-0.16.3-mainnet"]
+	chainId, ok := marlinTypes.ServicedChains["cosmos-3-mainnet"]
 	if !ok {
-		return TendermintHandler{}, errors.New("Cannot find irisnet-0.16.3-mainnet in list of serviced chains by marlin connector")
+		return TendermintHandler{}, errors.New("Cannot find cosmos-3-mainnet in list of serviced chains by marlin connector")
 	}
 
 	privateKey := getPrivateKey()
