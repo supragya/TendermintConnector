@@ -8,6 +8,7 @@ var applicationVersion string = "0.1-rc-1"
 // Supported Chains
 var supportedChains = []string{
 	"IRISNet Mainnet 0.16.3 v0.1",
+	"Cosmos-3 Mainnet",
 }
 
 // Marlin TM Encoder/Decoder Protocols
