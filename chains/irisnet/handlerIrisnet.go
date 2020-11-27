@@ -38,6 +38,11 @@ var ServicedTMCore chains.NodeType = chains.NodeType{Version: "0.32.2", Network:
 
 // ---------------------- DATA CONNECT INTERFACE --------------------------------
 
+
+// RunDataConnect checks for errors while making connection with the base.
+// This Error may include base connection establishment, creating TM Handler,
+// handhsaking, upgrading connection of handshaking. It will also reattempt
+// the connection.
 func RunDataConnect(peerAddr string,
 	marlinTo chan marlinTypes.MarlinMessage,
 	marlinFrom chan marlinTypes.MarlinMessage,
@@ -93,6 +98,10 @@ func RunDataConnect(peerAddr string,
 	}
 }
 
+// dialPeer will check if the Peer has dialed succesfully or not,
+// This function is used RunDataConnect, if there are errors
+// found while dialling the connection then it will return
+// an error to RunDataConnect, otherwise return "nil"
 func (h *TendermintHandler) dialPeer() error {
 	var err error
 	h.baseConnection, err = net.DialTimeout("tcp", h.peerAddr, 2000*time.Millisecond)
@@ -103,6 +112,10 @@ func (h *TendermintHandler) dialPeer() error {
 	return nil
 }
 
+// acceptPeer will check the if the Peer has connected succesfully 
+// or not, this function is used in RunDataConnect, if there are 
+// errors found while making an successful connection then it will return
+// an error to RunDataConnect, otherwise return "nil"
 func (h *TendermintHandler) acceptPeer() error {
 	log.Info("TMCore side listening for dials to ",
 		string(hex.EncodeToString(h.privateKey.PubKey().Address())), "@<SYSTEM-IP-ADDR>:", h.listenPort)
@@ -120,6 +133,10 @@ func (h *TendermintHandler) acceptPeer() error {
 	return nil
 }
 
+// upgradeConnectionAndHandshake checks if there has been a secret
+// connecton established or if there is a problem with handshaking.
+// if no error has been captured, it will give a successful connection 
+// with Address and node info 
 func (h *TendermintHandler) upgradeConnectionAndHandshake() error {
 	var err error
 	h.secretConnection, err = conn.MakeSecretConnection(h.baseConnection, h.privateKey)
@@ -138,6 +155,12 @@ func (h *TendermintHandler) upgradeConnectionAndHandshake() error {
 	return nil
 }
 
+// handshake function follows the protocol set on amino spec,
+// MarshalBinaryLengthPrefixed encodes the object according to the Amino spec
+// same goes for UnmarshalBinaryLengthPrefixedReader
+// Error encounterd while seniding handhshaking message or reciving 
+// using Amino spec will be checked here and 
+// returned to upgradeConnectionAndHandshake
 func (h *TendermintHandler) handshake() error {
 	var (
 		errc                        = make(chan error, 2)
@@ -183,6 +206,8 @@ func (h *TendermintHandler) handshake() error {
 	return nil
 }
 
+// forms a P2P connection with the registered node
+// sends and recives routines accordingly
 func (h *TendermintHandler) beginServicing() error {
 	// Register Messages
 	RegisterPacket(h.codec)
@@ -215,6 +240,13 @@ func (h *TendermintHandler) beginServicing() error {
 	return nil
 }
 
+// Datas are recived by TM Core
+// sendRoutine sends PING and PONG message to TM Core
+// case h.p2pConnection.pingTimer.C: Sends PING messages to TM Core
+// case h.p2pConnection.pong:  Sends PONG messages to TM Core
+// case timeout: Check if PONG messages are received in time
+// case h.signalShutSend: Block to Shut down sendRoutine
+// case marlinmsg: messages are recived from the marlin relay
 func (h *TendermintHandler) sendRoutine() {
 	log.Info("TMCore <- Connector Routine Started")
 
@@ -394,6 +426,10 @@ func (h *TendermintHandler) sendRoutine() {
 	}
 }
 
+// Data processed and sent back
+// case PacketPing: Received PING messages from TM Core
+// case PacketPong: Received PONG messages from TM Core
+// case PacketMsg:  Actual message packets from TM Core (encoded form)
 func (h *TendermintHandler) recvRoutine() {
 	log.Info("TMCore -> Connector Routine Started")
 
@@ -619,6 +655,7 @@ FOR_LOOP:
 	}
 }
 
+//decodes the Consensus Messages From the Channel Buffer
 func (h *TendermintHandler) decodeConsensusMsgFromChannelBuffer(chanbuf []marlinTypes.PacketMsg) (ConsensusMessage, error) {
 	var databuf []byte
 	var msg ConsensusMessage
@@ -633,6 +670,8 @@ func (h *TendermintHandler) decodeConsensusMsgFromChannelBuffer(chanbuf []marlin
 	return msg, err
 }
 
+// Stop the PONG time when the PING is called upon in
+// recvRoutine
 func (c *P2PConnection) stopPongTimer() {
 	if c.pongTimer != nil {
 		_ = c.pongTimer.Stop()
