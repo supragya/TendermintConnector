@@ -14,12 +14,15 @@ import (
 	"github.com/tendermint/tendermint/crypto/merkle"
 )
 
+// ProtocolVersion defines the structure consisting of P2P, block and App
 type ProtocolVersion struct {
 	P2P   uint64 `json:"p2p"`
 	Block uint64 `json:"block"`
 	App   uint64 `json:"app"`
 }
 
+// DefaultNodeInfo defines the structure consisting of ID, Listener Address,
+// Chain/Network ID, Version(Major/Minor), Channels, Moniker 
 type DefaultNodeInfo struct {
 	ProtocolVersion ProtocolVersion `json:"protocol_version"`
 
@@ -43,6 +46,7 @@ type DefaultNodeInfoOther struct {
 	RPCAddress string `json:"rpc_address"`
 }
 
+// P2PConnection defines the structure of P2P Layer
 type P2PConnection struct {
 	conn          net.Conn
 	bufConnReader *bufio.Reader
@@ -87,7 +91,8 @@ type P2PConnection struct {
 type Packet interface {
 	AssertIsPacket()
 }
-
+// RegisterPacket registers the PING and PONG in the 
+// form of packet
 func RegisterPacket(cdc *amino.Codec) {
 	cdc.RegisterInterface((*Packet)(nil), nil)
 	cdc.RegisterConcrete(PacketPing{}, "tendermint/p2p/PacketPing", nil)
@@ -99,18 +104,22 @@ func (_ PacketPing) AssertIsPacket() {}
 func (_ PacketPong) AssertIsPacket() {}
 func (_ PacketMsg) AssertIsPacket()  {}
 
+// Structure for Ping Packet
 type PacketPing struct {
 }
 
+// Strucutre for Pong Packet
 type PacketPong struct {
 }
 
+// Structure for  Messages packet
 type PacketMsg struct {
 	ChannelID byte
 	EOF       byte // 1 means message ends here.
 	Bytes     []byte
 }
 
+// String fucntion for Channel ID, Bytes, EOF
 func (mp PacketMsg) String() string {
 	return fmt.Sprintf("PacketMsg{%X:%X T:%X}", mp.ChannelID, mp.Bytes, mp.EOF)
 }
@@ -120,6 +129,8 @@ type ConsensusMessage interface {
 	ValidateBasic() error
 }
 
+// RegisterConsensusMessages registers the Consensus Messages
+// between tendermint and consensus layer
 func RegisterConsensusMessages(cdc *amino.Codec) {
 	cdc.RegisterInterface((*ConsensusMessage)(nil), nil)
 	cdc.RegisterConcrete(&NewRoundStepMessage{}, "tendermint/NewRoundStepMessage", nil)
