@@ -682,6 +682,8 @@ func (c *P2PConnection) stopPongTimer() {
 // ---------------------- SPAM FILTER INTERFACE --------------------------------
 
 // RunSpamFilter serves as the entry point for a TM Core handler when serving as a spamfilter
+// This function also acts as filter at the very begining of the TM Core, spam filter depends
+// on the Core count. Number of spam filter  will  be "2* core count".
 func RunSpamFilter(rpcAddr string,
 	marlinTo chan marlinTypes.MarlinMessage,
 	marlinFrom chan marlinTypes.MarlinMessage) {
@@ -709,6 +711,10 @@ func RunSpamFilter(rpcAddr string,
 	handler.throughput.presentThroughput(5, handler.signalShutThroughput)
 }
 
+// Spam Filter executions begins from beginServicingSpamFilter
+// this function will check for all possible spam from TM Core.
+// Spam can also be produced from Marlin Relay. So beginServicingSpamFilter
+// will also check for that.
 func (h *TendermintHandler) beginServicingSpamFilter(id int) {
 	log.Info("Running TM side spam filter handler ", id)
 	// Register Messages
@@ -803,6 +809,8 @@ func (h *TendermintHandler) beginServicingSpamFilter(id int) {
 	}
 }
 
+// thoroughMessageCheck is used in beginServicingSpamFilter.
+// thoroughMessageCheck verify the Messages from the Marlin Relay
 func (h *TendermintHandler) thoroughMessageCheck(msg ConsensusMessage) bool {
 	switch msg.(type) {
 	case *VoteMessage:
@@ -830,6 +838,7 @@ func (h *TendermintHandler) thoroughMessageCheck(msg ConsensusMessage) bool {
 	}
 }
 
+// 	
 func (vote *Vote) SignBytes(chainID string, cdc *amino.Codec) []byte {
 	bz, err := cdc.MarshalBinaryLengthPrefixed(CanonicalizeVote(chainID, vote))
 	if err != nil {
@@ -838,6 +847,8 @@ func (vote *Vote) SignBytes(chainID string, cdc *amino.Codec) []byte {
 	return bz
 }
 
+// Get the height of block chain
+//
 func (h *TendermintHandler) getValidators(height int64) ([]Validator, bool) {
 	if height+10 < h.maxValidHeight {
 		// Don't service messages too old
@@ -892,6 +903,12 @@ func (h *TendermintHandler) getValidators(height int64) ([]Validator, bool) {
 	}
 }
 
+// spamVerdictMessage used in beginServicingSpamFilter. This function
+// is used to store Messages of Marlin and even return the Boolean value
+// in beginServicingSpamFilter, according to boolean value. flow of this
+// function gets executed. If the messages are recived in the form of 0x01
+// channel, it will allow the request to be proccessed, otherwise it will
+// deny it 	 	
 func (h *TendermintHandler) spamVerdictMessage(msg marlinTypes.MarlinMessage, allow bool) marlinTypes.MarlinMessage {
 	if allow {
 		return marlinTypes.MarlinMessage{
@@ -915,6 +932,7 @@ var isKeyFileUsed, memoized bool
 var keyFileLocation string
 var privateKey ed25519.PrivKeyEd25519
 
+//Generates privatekey and publickey
 func GenerateKeyFile(fileLocation string) {
 	log.Info("Generating KeyPair for irisnet-0.16.3-mainnet")
 
@@ -944,6 +962,7 @@ func GenerateKeyFile(fileLocation string) {
 	log.Info("Successfully written keyfile ", fileLocation)
 }
 
+// VerifyKeyFile  verify's the 'key' file-location
 func VerifyKeyFile(fileLocation string) (bool, error) {
 	log.Info("Accessing disk to extract info from KeyFile: ", fileLocation)
 	jsonFile, err := os.Open(fileLocation)
@@ -972,6 +991,8 @@ func VerifyKeyFile(fileLocation string) (bool, error) {
 	}
 }
 
+// This functions gets the private key from the keyfile!
+// Also verifies the Keyfile integrity
 func getPrivateKey() ed25519.PrivKeyEd25519 {
 	if !isKeyFileUsed {
 		return ed25519.GenPrivKey()
@@ -1010,7 +1031,7 @@ func getPrivateKey() ed25519.PrivKeyEd25519 {
 
 // ---------------------- COMMON UTILITIES ---------------------------------
 
-
+//Creates Tendermint Handler between Marlin Relay and TM Core
 func createTMHandler(peerAddr string,
 	rpcAddr string,
 	marlinTo chan marlinTypes.MarlinMessage,
@@ -1055,6 +1076,7 @@ func createTMHandler(peerAddr string,
 	}, nil
 }
 
+//putInfo function into "to",  "from", "spam"
 func (t *throughPutData) putInfo(direction string, key string, count uint32) {
 	t.mu.Lock()
 	switch direction {
@@ -1067,7 +1089,8 @@ func (t *throughPutData) putInfo(direction string, key string, count uint32) {
 	}
 	t.mu.Unlock()
 }
-
+// This function display the logs/stats of marlin to 
+// and marlin from or SpamFilter
 func (t *throughPutData) presentThroughput(sec time.Duration, shutdownCh chan struct{}) {
 	for {
 		time.Sleep(sec * time.Second)
