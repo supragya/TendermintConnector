@@ -130,7 +130,6 @@ type ConsensusMessage interface {
 }
 
 // RegisterConsensusMessages registers the Consensus Messages
-// between tendermint and consensus layer
 func RegisterConsensusMessages(cdc *amino.Codec) {
 	cdc.RegisterInterface((*ConsensusMessage)(nil), nil)
 	cdc.RegisterConcrete(&NewRoundStepMessage{}, "tendermint/NewRoundStepMessage", nil)

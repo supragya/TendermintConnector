@@ -99,9 +99,8 @@ func RunDataConnect(peerAddr string,
 }
 
 // dialPeer will check if the Peer has dialed succesfully or not,
-// This function is used RunDataConnect, if there are errors
-// found while dialling the connection then it will return
-// an error to RunDataConnect, otherwise return "nil"
+// if there are errors found while dialling the connection then it
+// will return an error to RunDataConnect, otherwise return "nil"
 func (h *TendermintHandler) dialPeer() error {
 	var err error
 	h.baseConnection, err = net.DialTimeout("tcp", h.peerAddr, 2000*time.Millisecond)
@@ -113,9 +112,8 @@ func (h *TendermintHandler) dialPeer() error {
 }
 
 // acceptPeer will check the if the Peer has connected succesfully 
-// or not, this function is used in RunDataConnect, if there are 
-// errors found while making an successful connection then it will return
-// an error to RunDataConnect, otherwise return "nil"
+// or not, if there are errors found while making an successful connection
+// then it will return an error to RunDataConnect, otherwise return "nil"
 func (h *TendermintHandler) acceptPeer() error {
 	log.Info("TMCore side listening for dials to ",
 		string(hex.EncodeToString(h.privateKey.PubKey().Address())), "@<SYSTEM-IP-ADDR>:", h.listenPort)
@@ -133,7 +131,7 @@ func (h *TendermintHandler) acceptPeer() error {
 	return nil
 }
 
-// upgradeConnectionAndHandshake checks if there has been a secret
+// upgradeConnectionAndHandshake establishes if there has been a secret
 // connecton established or if there is a problem with handshaking.
 // if no error has been captured, it will give a successful connection 
 // with Address and node info 
@@ -156,8 +154,8 @@ func (h *TendermintHandler) upgradeConnectionAndHandshake() error {
 }
 
 // handshake function follows the protocol set on amino spec,
-// MarshalBinaryLengthPrefixed encodes the object according to the Amino spec
-// same goes for UnmarshalBinaryLengthPrefixedReader
+// During the handshake the server client will exchange 
+// information required to establish the secure connection.
 // Error encounterd while seniding handhshaking message or reciving 
 // using Amino spec will be checked here and 
 // returned to upgradeConnectionAndHandshake
@@ -206,7 +204,7 @@ func (h *TendermintHandler) handshake() error {
 	return nil
 }
 
-// forms a P2P connection with the registered node
+// establishes a P2P connection with the TM Core
 // sends and recives routines accordingly
 func (h *TendermintHandler) beginServicing() error {
 	// Register Messages
@@ -240,13 +238,12 @@ func (h *TendermintHandler) beginServicing() error {
 	return nil
 }
 
-// Datas are recived by TM Core
-// sendRoutine sends PING and PONG message to TM Core
-// case h.p2pConnection.pingTimer.C: Sends PING messages to TM Core
-// case h.p2pConnection.pong:  Sends PONG messages to TM Core
-// case timeout: Check if PONG messages are received in time
-// case h.signalShutSend: Block to Shut down sendRoutine
-// case marlinmsg: messages are recived from the marlin relay
+// Datas are recived by TM Core. sendRoutine sends PING
+// and PONG message to TM Core. Basically, it will
+// Sends PING messages to TM Core or Sends PONG messages
+// to TM Core or Check if PONG messages are received
+// in time or Block to Shut down sendRoutine or
+// messages are recived from the marlin relay.
 func (h *TendermintHandler) sendRoutine() {
 	log.Info("TMCore <- Connector Routine Started")
 
@@ -426,10 +423,9 @@ func (h *TendermintHandler) sendRoutine() {
 	}
 }
 
-// Data processed and sent back
-// case PacketPing: Received PING messages from TM Core
-// case PacketPong: Received PONG messages from TM Core
-// case PacketMsg:  Actual message packets from TM Core (encoded form)
+// Data is  processed and sent back
+// Received PING and PONG messages from TM Core
+// and Actual message packets are encoded from TM Core 
 func (h *TendermintHandler) recvRoutine() {
 	log.Info("TMCore -> Connector Routine Started")
 
@@ -682,8 +678,7 @@ func (c *P2PConnection) stopPongTimer() {
 // ---------------------- SPAM FILTER INTERFACE --------------------------------
 
 // RunSpamFilter serves as the entry point for a TM Core handler when serving as a spamfilter
-// This function also acts as filter at the very begining of the TM Core, spam filter depends
-// on the Core count. Number of spam filter  will  be "2* core count".
+// Number of goroutines spawned will  be "2* core count".
 func RunSpamFilter(rpcAddr string,
 	marlinTo chan marlinTypes.MarlinMessage,
 	marlinFrom chan marlinTypes.MarlinMessage) {
@@ -712,7 +707,7 @@ func RunSpamFilter(rpcAddr string,
 }
 
 // Spam Filter executions begins from beginServicingSpamFilter
-// this function will check for all possible spam from TM Core.
+// this function will check for all possible spam  at ingress point of Marlin Relay.
 // Spam can also be produced from Marlin Relay. So beginServicingSpamFilter
 // will also check for that.
 func (h *TendermintHandler) beginServicingSpamFilter(id int) {
@@ -809,8 +804,8 @@ func (h *TendermintHandler) beginServicingSpamFilter(id int) {
 	}
 }
 
-// thoroughMessageCheck is used in beginServicingSpamFilter.
-// thoroughMessageCheck verify the Messages from the Marlin Relay
+// 
+//
 func (h *TendermintHandler) thoroughMessageCheck(msg ConsensusMessage) bool {
 	switch msg.(type) {
 	case *VoteMessage:
@@ -904,11 +899,10 @@ func (h *TendermintHandler) getValidators(height int64) ([]Validator, bool) {
 }
 
 // spamVerdictMessage used in beginServicingSpamFilter. This function
-// is used to store Messages of Marlin and even return the Boolean value
-// in beginServicingSpamFilter, according to boolean value. flow of this
-// function gets executed. If the messages are recived in the form of 0x01
-// channel, it will allow the request to be proccessed, otherwise it will
-// deny it 	 	
+// return the Boolean value in beginServicingSpamFilter, according to
+// boolean value. flow of this function gets executed. If the messages
+// are recived in the form of 0x01 channel, it will allow the request
+// to be proccessed, otherwise it will deny it 	 	
 func (h *TendermintHandler) spamVerdictMessage(msg marlinTypes.MarlinMessage, allow bool) marlinTypes.MarlinMessage {
 	if allow {
 		return marlinTypes.MarlinMessage{
@@ -932,7 +926,8 @@ var isKeyFileUsed, memoized bool
 var keyFileLocation string
 var privateKey ed25519.PrivKeyEd25519
 
-//Generates privatekey and publickey
+// Generates privatekey and publickey
+// ED25519 Keypair is generated
 func GenerateKeyFile(fileLocation string) {
 	log.Info("Generating KeyPair for irisnet-0.16.3-mainnet")
 
@@ -1031,7 +1026,7 @@ func getPrivateKey() ed25519.PrivKeyEd25519 {
 
 // ---------------------- COMMON UTILITIES ---------------------------------
 
-//Creates Tendermint Handler between Marlin Relay and TM Core
+//Creates  Handler object between Marlin Relay and TM Core
 func createTMHandler(peerAddr string,
 	rpcAddr string,
 	marlinTo chan marlinTypes.MarlinMessage,
@@ -1089,8 +1084,7 @@ func (t *throughPutData) putInfo(direction string, key string, count uint32) {
 	}
 	t.mu.Unlock()
 }
-// This function display the logs/stats of marlin to 
-// and marlin from or SpamFilter
+// This function display the logs/stats of SpamFilter
 func (t *throughPutData) presentThroughput(sec time.Duration, shutdownCh chan struct{}) {
 	for {
 		time.Sleep(sec * time.Second)

@@ -256,7 +256,6 @@ func (sc *SecretConnection) SetWriteDeadline(t time.Time) error {
 	return sc.conn.(net.Conn).SetWriteDeadline(t)
 }
 
-// genEphKeys generates Ephemeral key-pair
 func genEphKeys() (ephPub, ephPriv *[32]byte) {
 	var err error
 	ephPub, ephPriv, err = box.GenerateKey(crand.Reader)
