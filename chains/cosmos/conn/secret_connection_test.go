@@ -28,6 +28,7 @@ type kvstoreConn struct {
 	*io.PipeWriter
 }
 
+// Close function will close the established connection
 func (drw kvstoreConn) Close() (err error) {
 	err2 := drw.PipeWriter.CloseWithError(io.EOF)
 	err1 := drw.PipeReader.Close()
@@ -44,6 +45,9 @@ func makeKVStoreConnPair() (fooConn, barConn kvstoreConn) {
 	return kvstoreConn{fooReader, fooWriter}, kvstoreConn{barReader, barWriter}
 }
 
+// makeSecretConnPair Establishes the secret connection pair
+// Also makes sure that the connection has been established 
+// successfully, if not established successfully then return an error
 func makeSecretConnPair(tb testing.TB) (fooSecConn, barSecConn *SecretConnection) {
 
 	var fooConn, barConn = makeKVStoreConnPair()
@@ -92,6 +96,7 @@ func makeSecretConnPair(tb testing.TB) (fooSecConn, barSecConn *SecretConnection
 	return
 }
 
+// Tests the Handshake of Secret Connections 
 func TestSecretConnectionHandshake(t *testing.T) {
 	fooSecConn, barSecConn := makeSecretConnPair(t)
 	if err := fooSecConn.Close(); err != nil {
@@ -145,6 +150,7 @@ func TestComputeDHFailsOnLowOrder(t *testing.T) {
 	}
 }
 
+// Test for concurrent write
 func TestConcurrentWrite(t *testing.T) {
 	fooSecConn, barSecConn := makeSecretConnPair(t)
 	fooWriteText := cmn.RandStr(dataMaxSize)
@@ -167,6 +173,7 @@ func TestConcurrentWrite(t *testing.T) {
 	}
 }
 
+// Test for concurrent read 
 func TestConcurrentRead(t *testing.T) {
 	fooSecConn, barSecConn := makeSecretConnPair(t)
 	fooWriteText := cmn.RandStr(dataMaxSize)
@@ -189,6 +196,7 @@ func TestConcurrentRead(t *testing.T) {
 	}
 }
 
+// writeLots writes in the fooSecConn, if not then return an error
 func writeLots(t *testing.T, wg *sync.WaitGroup, conn net.Conn, txt string, n int) {
 	defer wg.Done()
 	for i := 0; i < n; i++ {
@@ -200,6 +208,7 @@ func writeLots(t *testing.T, wg *sync.WaitGroup, conn net.Conn, txt string, n in
 	}
 }
 
+// reads from fooSecConn
 func readLots(t *testing.T, wg *sync.WaitGroup, conn net.Conn, n int) {
 	readBuffer := make([]byte, dataMaxSize)
 	for i := 0; i < n; i++ {
@@ -209,6 +218,9 @@ func readLots(t *testing.T, wg *sync.WaitGroup, conn net.Conn, n int) {
 	wg.Done()
 }
 
+// Test the secret connection has been established or not
+// Also checks if the connection can read or write from node
+// and even check the accurate number of bytes to be written 
 func TestSecretConnectionReadWrite(t *testing.T) {
 	fooConn, barConn := makeKVStoreConnPair()
 	fooWrites, barWrites := []string{}, []string{}
@@ -375,6 +387,8 @@ func (pk privKeyWithNilPubKey) Sign(msg []byte) ([]byte, error) { return pk.orig
 func (pk privKeyWithNilPubKey) PubKey() crypto.PubKey           { return nil }
 func (pk privKeyWithNilPubKey) Equals(pk2 crypto.PrivKey) bool  { return pk.orig.Equals(pk2) }
 
+// TestNilPubkey checks if ed25519 public key has been 
+// generated, otherwise return error
 func TestNilPubkey(t *testing.T) {
 	var fooConn, barConn = makeKVStoreConnPair()
 	var fooPrvKey = ed25519.GenPrivKey()
@@ -393,6 +407,10 @@ func TestNilPubkey(t *testing.T) {
 	})
 }
 
+// TestNonEd25519Pubkey tests if public key ed25519 has been 
+// genreated or the secp256k1.PubKeySecp256k1 has been 
+// generated, if secp256k1.PubKeySecp256k1 has been genreated 
+// then it will throw the error of "secp256k1.PubKeySecp256k1"
 func TestNonEd25519Pubkey(t *testing.T) {
 	var fooConn, barConn = makeKVStoreConnPair()
 	var fooPrvKey = ed25519.GenPrivKey()
