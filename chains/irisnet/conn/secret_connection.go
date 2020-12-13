@@ -255,7 +255,9 @@ func (sc *SecretConnection) SetReadDeadline(t time.Time) error {
 func (sc *SecretConnection) SetWriteDeadline(t time.Time) error {
 	return sc.conn.(net.Conn).SetWriteDeadline(t)
 }
-
+// genEphKeys generates the Ephemeral key- pair. 
+// A cryptographic key is called Ephemeral if it is generated
+// for each execution of a key establishment process.
 func genEphKeys() (ephPub, ephPriv *[32]byte) {
 	var err error
 	ephPub, ephPriv, err = box.GenerateKey(crand.Reader)
@@ -335,8 +337,8 @@ var blacklist = [][32]byte{
 		0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f},
 }
 
-// hasSmallOrder used in shareEphPubKey, the function is used to
-// check the if the Empherial key generated has small order or not
+// hasSmallOrder is used to check the if the Empherial key
+// generated has small order or not
 func hasSmallOrder(pubKey [32]byte) bool {
 	isSmallOrderPoint := false
 	for _, bl := range blacklist {
