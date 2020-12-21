@@ -80,6 +80,6 @@ func init() {
 	dataconnectCmd.Flags().StringVarP(&keyFile, "keyfile", "k", "", "KeyFile to use for connection")
 	dataconnectCmd.Flags().BoolVarP(&isConnectionOutgoing, "dial", "d", false, "Connector DIALs TMCore if flag is set, otherwise connector LISTENs for connections.")
 	dataconnectCmd.Flags().StringVarP(&marlinIP, "marlinip", "m", "127.0.0.1", "Marlin TCP Bridge IP address")
-	dataconnectCmd.Flags().IntVarP(&marlinPort, "marlinport", "n", 15003, "Marlin TCP Bridge IP port")
-	dataconnectCmd.Flags().IntVarP(&listenPortPeer, "listenportpeer", "l", 59001, "Port on which Connector should listen for incoming connections from peer. Only applicable for Peer side LISTEN mode.")
+	dataconnectCmd.Flags().IntVarP(&marlinPort, "marlinport", "n", 21901, "Marlin TCP Bridge port (default: 21901 IRIS, 22401 COSMOS)")
+	dataconnectCmd.Flags().IntVarP(&listenPortPeer, "listenportpeer", "l", 21900, "Port on which Connector should listen for incoming connections from peer. (defaults: 21900 IRIS, 22400 COSMOS)")
 }
