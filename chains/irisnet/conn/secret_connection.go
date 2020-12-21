@@ -21,7 +21,7 @@ import (
 	"golang.org/x/crypto/nacl/box"
 
 	pool "github.com/libp2p/go-buffer-pool"
-	cmn "github.com/supragya/tendermint_connector/chains/irisnet/libs/common"
+	cmn "github.com/supragya/TendermintConnector/chains/irisnet/libs/common"
 	"github.com/tendermint/tendermint/crypto"
 	"golang.org/x/crypto/hkdf"
 )

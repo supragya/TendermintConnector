@@ -21,17 +21,17 @@ import (
 	"net/http"
 
 	log "github.com/sirupsen/logrus"
-	marlinTypes "github.com/supragya/tendermint_connector/types"
+	marlinTypes "github.com/supragya/TendermintConnector/types"
 
 	// Tendermint Core Chains
-	"github.com/supragya/tendermint_connector/chains"
-	"github.com/supragya/tendermint_connector/chains/irisnet"
-	"github.com/supragya/tendermint_connector/chains/cosmos"
+	"github.com/supragya/TendermintConnector/chains"
+	"github.com/supragya/TendermintConnector/chains/irisnet"
+	"github.com/supragya/TendermintConnector/chains/cosmos"
 )
 
 var peerPort, rpcPort, marlinPort, listenPortPeer int
 var peerIP, marlinIP, keyFile, chain, fileLocation, marlinUdsFile string
-var isConnectionOutgoing, isGenerate, isMarlinconnectionOutgoing bool
+var isConnectionOutgoing, isGenerate, isMarlinconnectionOutgoing, doRpcSanity bool
 
 func getRPCNodeStatus(rpcAddr string) (map[string]interface{}, error) {
 	log.Info("Retrieving Information from RPC server")

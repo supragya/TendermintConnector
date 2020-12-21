@@ -17,7 +17,7 @@ package main
 
 import (
 	log "github.com/sirupsen/logrus"
-	"github.com/supragya/tendermint_connector/cmd"
+	"github.com/supragya/TendermintConnector/cmd"
 )
 
 func main() {

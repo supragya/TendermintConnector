@@ -11,10 +11,10 @@ import (
 	proto "github.com/golang/protobuf/proto"
 	log "github.com/sirupsen/logrus"
 
-	marlinTypes "github.com/supragya/tendermint_connector/types"
+	marlinTypes "github.com/supragya/TendermintConnector/types"
 
 	// Protocols
-	wireProtocol "github.com/supragya/tendermint_connector/protocols/tmDataTransferProtocolv1"
+	wireProtocol "github.com/supragya/TendermintConnector/protocols/tmDataTransferProtocolv1"
 )
 
 var currentlyServicing uint32

@@ -6,7 +6,7 @@
 Tendermint Connector is a bridging application required for Tendermint based blockchains to interface with Marlin Protocol. Tendermint Connector connects as a peer to already running TM based blockchain and retrieves / pushes selective messages that the peer needs from / to Marlin Relays. Tendermint Connector also doubles up as a spam checker machanism for marlin relay.
 
 ## Serviced Blockchains
-Currently, the following blockchains are serviced by **tendermint_connector**:
+Currently, the following blockchains are serviced by **TendermintConnector**:
 1. Irisnet Mainnet 0.16.3
 2. Cosmos-3 Mainnet (WIP)
 
@@ -35,7 +35,7 @@ Tendermint Connector runs in two different modes:
 2. **SpamFilter mode**: Tendermint Connector acts as a spamfilter servicing application at marlin relay nodes and interacts with `tm_abci`. Relay operators would like to use this mode.
 
 ### marlinTo and marlinFrom
-**marlinTo** and **marlinFrom** are two channels which act as a connecting buffer between the marlin side connector and peer side connector. Both of these are capable of holding upto 1000 messages in each direction and are supposed to make both sides (marlin side / peer side) be agnostic of wire protocols each of them use. In case of overflow, oldest messages are dropped and shown as warning by tendermint_connector.
+**marlinTo** and **marlinFrom** are two channels which act as a connecting buffer between the marlin side connector and peer side connector. Both of these are capable of holding upto 1000 messages in each direction and are supposed to make both sides (marlin side / peer side) be agnostic of wire protocols each of them use. In case of overflow, oldest messages are dropped and shown as warning by TendermintConnector.
 
 ### Selecting a Peer Side Connector
 Tendermint Connector aims to provide support for many tendermint based blockchains. Consequently, there needs to be quite similar however different peer side connectors that are engineered to support a specific blockchain. 
@@ -60,45 +60,45 @@ Tendermint Connector's marlin side connectivity is not always TCP. While in "dat
 
 
 ## Running the application
-The tendermint_connector application provides the following features:
+The TendermintConnector application provides the following features:
 1. Full CLI interface (POSIX style flags)
 2. Automatic Blockchain detection based on Node Info of peer (RPC access to real TMCore required)
 3. Secured On the fly ED25519 key pair generation and handshake for every session in peerdial
 
 For finding version info of the application, supported chains and supported encodings for marlin relay, run:
 ```
-tendermint_connector --version
+TendermintConnector --version
 ```
 
 This should return you information such as this:
 ```
-tendermint_connector version 0.1-rc-1
+TendermintConnector version 0.1-rc-1
 + [Tendermint Chain]   IRISNet Mainnet 0.16.3 (Consensus State transfers) v0.1
 + [Marlin TM Protocol] Marlin Tendermint Data Transfer Protocol v1
 ```
 
-### tendermint_connector as a dataconnector between TMCore and Marlin Relay
+### TendermintConnector as a dataconnector between TMCore and Marlin Relay
 ```
-tendermint_connector dataconnect --dial
+TendermintConnector dataconnect --dial
 ```
 Tendermint connector will automatically try to connect using the default parameters.
 
-You can learn more about the *tendermint_connector connect* command using `tendermint_connector connect -h`.
+You can learn more about the *TendermintConnector connect* command using `TendermintConnector connect -h`.
 
 For configuring any of this for runtime, the following can be used for changed params:
 ```
-tendermint_connector --server_address 127.0.0.2 --rpc_port 21222
+TendermintConnector --server_address 127.0.0.2 --rpc_port 21222
 ```
 
-### tendermint_connector keyfiles for persistent peer connection between TMCore and tendermint_connector
+### TendermintConnector keyfiles for persistent peer connection between TMCore and TendermintConnector
 ```
-tendermint_connector keyfile
+TendermintConnector keyfile
 ```
-Tendermint connector can act as a tendermint peer who listens for connections instead of dialing TMCore itself. For this, you may need a persistent node ID to put in `config.toml` file for your real tendermint node. This is of format: *ae239af43..9bd7@127.0.0.1:266657*. This is essentially **nodeID@IP:PORT**. A keyfile for tendermint_connector is a file which describes the nodeID for tendermint_connector to use across process runs; it provides tendermint_connector with keys for fulfilling it's job as the given nodeID.
+Tendermint connector can act as a tendermint peer who listens for connections instead of dialing TMCore itself. For this, you may need a persistent node ID to put in `config.toml` file for your real tendermint node. This is of format: *ae239af43..9bd7@127.0.0.1:266657*. This is essentially **nodeID@IP:PORT**. A keyfile for TendermintConnector is a file which describes the nodeID for TendermintConnector to use across process runs; it provides TendermintConnector with keys for fulfilling it's job as the given nodeID.
 
 For example, you can generate a keyfile for irisnet chain using the following command:
 ```
-tendermint_connector keyfile --chain irisnet --filelocation irisnetkeys.json --generate
+TendermintConnector keyfile --chain irisnet --filelocation irisnetkeys.json --generate
 ```
 
 This would return logs similar to below:
@@ -110,25 +110,25 @@ This would return logs similar to below:
 
 This would create a new file `irisnetkeys.json` which contains keys relevant to peer nodeID `376378adce3c6e3fde8201a4926b4adae6cb72e0`. You can now put `376378adce3c6e3fde8201a4926b4adae6cb72e0@127.0.0.1:59001` (for localhost) as a persistent peer of your real tendermint node by editing your *config.toml* or passing peer as a command line argument.
 
-Subsequent runs of `tendermint_connector connect` would require this keyfile to be provided to the program using command such as follows:
+Subsequent runs of `TendermintConnector connect` would require this keyfile to be provided to the program using command such as follows:
 ```
-tendermint_connector connect --keyfile irisnetkeys.json
+TendermintConnector connect --keyfile irisnetkeys.json
 ```
 
 You may wish to verify the integrity of generated keyfiles. This can be done by simply (no `--generate` flag):
 ```
-tendermint_connector keyfile --keyfile irisnetkeys.json --chain irisnet
+TendermintConnector keyfile --keyfile irisnetkeys.json --chain irisnet
 ```
 
-### tendermint_connector as a spamfilter for Marlin Relay
+### TendermintConnector as a spamfilter for Marlin Relay
 ```
-tendermint_connector spamfilter
+TendermintConnector spamfilter
 ```
 Tendermint connector will run as a spam filter endpoint for verifying messages recieved at any relay endpoint. The expected format of message in spamfilter mode is proto3 encoded Marlin Tendermint Data Transfer Protocol messages. Spamfilter replies with a single byte (0 or 1) for whether message is spam (0), hence to be blocked or not (1), hence to be allowed.
 
-You can learn more about the *tendermint_connector spamfilter* command using `tendermint_connector spamfilter -h`.
+You can learn more about the *TendermintConnector spamfilter* command using `TendermintConnector spamfilter -h`.
 
 For configuring any of this for runtime, the following can be used for changed params:
 ```
-tendermint_connector spamfilter --peerip 127.0.0.2 --rpcport 26667
+TendermintConnector spamfilter --peerip 127.0.0.2 --rpcport 26667
 ```

@@ -9,8 +9,8 @@ import (
 	"errors"
 
 	amino "github.com/tendermint/go-amino"
-	cmn "github.com/supragya/tendermint_connector/chains/irisnet/libs/common"
-	flow "github.com/supragya/tendermint_connector/chains/irisnet/libs/flowrate"
+	cmn "github.com/supragya/TendermintConnector/chains/irisnet/libs/common"
+	flow "github.com/supragya/TendermintConnector/chains/irisnet/libs/flowrate"
 	"github.com/tendermint/tendermint/crypto/merkle"
 )
 

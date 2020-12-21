@@ -7,8 +7,8 @@ import (
 	amino "github.com/tendermint/go-amino"
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	"github.com/supragya/tendermint_connector/chains/cosmos/conn"
-	marlinTypes "github.com/supragya/tendermint_connector/types"
+	"github.com/supragya/TendermintConnector/chains/cosmos/conn"
+	marlinTypes "github.com/supragya/TendermintConnector/types"
 )
 
 type TendermintHandler struct {

@@ -19,11 +19,13 @@ import (
 	"fmt"
 	// log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/supragya/tendermint_connector/marlin"
-	"github.com/supragya/tendermint_connector/types"
+	"github.com/supragya/TendermintConnector/marlin"
+	"github.com/supragya/TendermintConnector/types"
 
 	// Tendermint Core Chains
-	"github.com/supragya/tendermint_connector/chains"
+	// "github.com/supragya/TendermintConnector/chains"
+	"github.com/supragya/TendermintConnector/chains/irisnet"
+	"github.com/supragya/TendermintConnector/chains/cosmos"
 )
 
 // connectCmd represents the connect command
@@ -33,27 +35,39 @@ var spamFilterCmd = &cobra.Command{
 	Long:  `Filter Spams on marlin relay`,
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcAddr := fmt.Sprintf("%v:%v", peerIP, rpcPort)
-		nodeStatus, err := getRPCNodeStatus(rpcAddr)
-		if err != nil {
-			return
-		}
+		// nodeStatus, err := getRPCNodeStatus(rpcAddr)
+		// if err != nil {
+		// 	return
+		// }
 
 		// Channels
 		marlinTo := make(chan types.MarlinMessage, 1000)
 		marlinFrom := make(chan types.MarlinMessage, 1000)
 
-		nodeInfo := extractNodeInfo(nodeStatus)
+		// nodeInfo := extractNodeInfo(nodeStatus)
 
 		// TODO - is this style of invocation correct? can we wrap this? WAITGROUPS??? - v0.1 prerelease
 		go marlin.RunSpamFilterHandler(marlinUdsFile, marlinTo, marlinFrom)
 
-		findAndRunSpamFilterHandler(nodeInfo["nodeType"].(chains.NodeType), rpcAddr, marlinTo, marlinFrom)
+		if compilationChain == "iris" {
+			findAndRunSpamFilterHandler(irisnet.ServicedTMCore, rpcAddr, marlinTo, marlinFrom)
+		} else if compilationChain == "cosmos"{
+			findAndRunSpamFilterHandler(cosmos.ServicedTMCore, rpcAddr, marlinTo, marlinFrom)
+		} else {
+			panic("Unknown chain. Exiting")
+		}
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(spamFilterCmd)
-	spamFilterCmd.Flags().StringVarP(&peerIP, "peerip", "p", "127.0.0.1", "Tendermint RPC IP address")
-	spamFilterCmd.Flags().IntVarP(&rpcPort, "rpcport", "r", 26657, "Tendermint Core rpc port")
-	spamFilterCmd.Flags().StringVarP(&marlinUdsFile, "marlinudsfile", "u", "/tmp/tm.ipc", "Marlin UDS file location")
+	if compilationChain == "iris" {
+		spamFilterCmd.Flags().StringVarP(&peerIP, "peerip", "p", "127.0.0.1", "Iris light client RPC IP address")
+		spamFilterCmd.Flags().IntVarP(&rpcPort, "rpcport", "r", 21504, "Iris light client rpc port")
+		spamFilterCmd.Flags().StringVarP(&marlinUdsFile, "marlinudsfile", "u", "/tmp/tm_iris.sock", "Marlin UDS file location to interface with ABCI")
+	} else if compilationChain == "cosmos" {
+		spamFilterCmd.Flags().StringVarP(&peerIP, "peerip", "p", "127.0.0.1", "Gaia light client RPC IP address")
+		spamFilterCmd.Flags().IntVarP(&rpcPort, "rpcport", "r", 22004, "Gaia light client rpc port")
+		spamFilterCmd.Flags().StringVarP(&marlinUdsFile, "marlinudsfile", "u", "/tmp/tm_cosmos.sock", "Marlin UDS file location to interface with ABCI")
+	}
 }

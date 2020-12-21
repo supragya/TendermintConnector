@@ -20,16 +20,16 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/hashicorp/golang-lru"
-	"github.com/supragya/tendermint_connector/chains"
-	"github.com/supragya/tendermint_connector/chains/cosmos/conn"
-	cmn "github.com/supragya/tendermint_connector/chains/cosmos/libs/common"
-	flow "github.com/supragya/tendermint_connector/chains/cosmos/libs/flowrate"
-	marlinTypes "github.com/supragya/tendermint_connector/types"
+	"github.com/supragya/TendermintConnector/chains"
+	"github.com/supragya/TendermintConnector/chains/cosmos/conn"
+	cmn "github.com/supragya/TendermintConnector/chains/cosmos/libs/common"
+	flow "github.com/supragya/TendermintConnector/chains/cosmos/libs/flowrate"
+	marlinTypes "github.com/supragya/TendermintConnector/types"
 	amino "github.com/tendermint/go-amino"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 
 	// Protocols
-	"github.com/supragya/tendermint_connector/marlin"
+	"github.com/supragya/TendermintConnector/marlin"
 )
 
 // ServicedTMCore is a string associated with each TM core handler
@@ -924,7 +924,7 @@ func VerifyKeyFile(fileLocation string) (bool, error) {
 	json.Unmarshal(byteValue, &key)
 
 	// TODO Check these conditions, add more checks - v0.2 prerelease
-	if string(hex.EncodeToString(key.PrivateKey[:])) == key.PrivateKeyString {
+	if key.Chain == "cosmos-3-mainnet" && string(hex.EncodeToString(key.PrivateKey[:])) == key.PrivateKeyString {
 		log.Info("Integrity for KeyFile: ", fileLocation, " checked. Integrity OK.")
 		return true, nil
 	} else {

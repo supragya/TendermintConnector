@@ -24,21 +24,23 @@ import (
 	homedir "github.com/mitchellh/go-homedir"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-	ver "github.com/supragya/tendermint_connector/version"
+	ver "github.com/supragya/TendermintConnector/version"
 )
+
+var compilationChain = "unknown"
 
 var cfgFile string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:     "tendermint_connector",
+	Use:     "TendermintConnector",
 	Short:   "Tendermint Connector connects to a tendermint core and listens to messages to deliver it raw for use",
 	Long:    `Tendermint Connector connects to a tendermint core and listens to messages to deliver it raw for use`,
 	Version: ver.RootCmdVersion,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
-		log.Error("Nothing to do. Select one of the commands (Try ./tendermint_connector --help). Exiting")
+		log.Error("Nothing to do. Select one of the commands (Try ./TendermintConnector --help). Exiting")
 	},
 }
 
@@ -68,9 +70,9 @@ func initConfig() {
 			os.Exit(1)
 		}
 
-		// Search config in home directory with name ".tendermint_connector" (without extension).
+		// Search config in home directory with name ".TendermintConnector" (without extension).
 		viper.AddConfigPath(home)
-		viper.SetConfigName(".tendermint_connector")
+		viper.SetConfigName(".TendermintConnector")
 	}
 
 	viper.AutomaticEnv() // read in environment variables that match

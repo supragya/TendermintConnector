@@ -20,9 +20,9 @@ import (
 	"github.com/spf13/cobra"
 
 	// Tendermint Core Chains
-	// "github.com/supragya/tendermint_connector/chains"
-	"github.com/supragya/tendermint_connector/chains/irisnet"
-	"github.com/supragya/tendermint_connector/chains/cosmos"
+	// "github.com/supragya/TendermintConnector/chains"
+	"github.com/supragya/TendermintConnector/chains/irisnet"
+	"github.com/supragya/TendermintConnector/chains/cosmos"
 )
 
 // connectCmd represents the connect command
@@ -52,7 +52,7 @@ var keyFileCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(keyFileCmd)
-	keyFileCmd.Flags().StringVarP(&chain, "chain", "c", "", "Tendermint based chain for which to generate KeyFile")
+	keyFileCmd.Flags().StringVarP(&chain, "chain", "c", "", "Tendermint based chain for which to generate KeyFile (irisnet/cosmos-3)")
 	keyFileCmd.Flags().StringVarP(&fileLocation, "filelocation", "f", "", "File to generate/validate")
 	keyFileCmd.Flags().BoolVarP(&isGenerate, "generate", "g", false, "Generate new file. If not set, validate given KeyFile")
 }

@@ -3,13 +3,13 @@ PROTOLOC=protocols/tmDataTransferProtocolv1
 GO=go
 GOBUILD=$(GO) build
 BINDIR=build
-BINCLI=tendermint_connector
-BIN=$(BINDIR)/$(BINCLI)
+BINCLI=TendermintConnector
 INSTALLLOC=/usr/local/bin/$(BINCLI)
 
 all:
 	$(PROTOC) --go_out=. $(PROTOLOC)/*.proto
-	$(GOBUILD) -o $(BIN)
+	$(GOBUILD) -ldflags="-X github.com/supragya/TendermintConnector/cmd.compilationChain=iris -linkmode=external" -o $(BINDIR)/iris_connector 
+	$(GOBUILD) -ldflags="-X github.com/supragya/TendermintConnector/cmd.compilationChain=cosmos -linkmode=external" -o $(BINDIR)/cosmos_connector
 
 clean:
 	rm $(PROTOLOC)/*.go

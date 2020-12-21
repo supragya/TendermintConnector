@@ -1,4 +1,4 @@
-module github.com/supragya/tendermint_connector
+module github.com/supragya/TendermintConnector
 
 go 1.15
 
