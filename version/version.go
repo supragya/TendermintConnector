@@ -3,7 +3,13 @@ package version
 import "bytes"
 
 // Application version
-var applicationVersion string = "0.1-rc-1"
+var applicationVersion string = "0.0.0"
+
+// Build commit
+var buildCommit string = "0x0000"
+
+// Build time
+var buildTime string = "Mon Dec 21 13:26:38 UTC 2020"
 
 // Supported Chains
 var supportedChains = []string{
@@ -20,7 +26,8 @@ var RootCmdVersion string = prepareVersionString()
 
 func prepareVersionString() string {
 	var buffer bytes.Buffer
-	buffer.WriteString(applicationVersion)
+	buffer.WriteString(applicationVersion + " build " + buildCommit)
+	buffer.WriteString("\nCompiled on: "+buildTime)
 	for _, v := range supportedChains {
 		buffer.WriteString("\n+ [Tendermint Chain]   " + v)
 
