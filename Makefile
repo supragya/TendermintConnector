@@ -1,5 +1,5 @@
 PROTOC=protoc
-PROTOLOC=marlin/protocols/tmDataTransferProtocolv1
+PROTOLOC=protocols/tmDataTransferProtocolv1
 GO=go
 GOBUILD=$(GO) build
 BINDIR=build

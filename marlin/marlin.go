@@ -14,7 +14,7 @@ import (
 	marlinTypes "github.com/supragya/tendermint_connector/types"
 
 	// Protocols
-	wireProtocol "github.com/supragya/tendermint_connector/marlin/protocols/tmDataTransferProtocolv1"
+	wireProtocol "github.com/supragya/tendermint_connector/protocols/tmDataTransferProtocolv1"
 )
 
 var currentlyServicing uint32
