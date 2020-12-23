@@ -23,6 +23,7 @@ import (
 	// "github.com/supragya/tendermint_connector/chains"
 	"github.com/supragya/tendermint_connector/chains/irisnet"
 	"github.com/supragya/tendermint_connector/chains/cosmos"
+	"github.com/supragya/tendermint_connector/chains/tendermint_34"
 )
 
 // connectCmd represents the connect command
@@ -44,6 +45,12 @@ var keyFileCmd = &cobra.Command{
 			} else {
 				cosmos.VerifyKeyFile(fileLocation)
 			}
+		case tendermint_34.ServicedKeyFile:
+			if isGenerate {
+				tendermint_34.GenerateKeyFile(fileLocation)
+			} else {
+				tendermint_34.VerifyKeyFile(fileLocation)
+			}			
 		default:
 			log.Error("Unknown tendermint chain, can't generate or verify for ", chain)
 		}

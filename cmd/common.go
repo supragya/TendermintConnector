@@ -27,6 +27,7 @@ import (
 	"github.com/supragya/tendermint_connector/chains"
 	"github.com/supragya/tendermint_connector/chains/irisnet"
 	"github.com/supragya/tendermint_connector/chains/cosmos"
+	"github.com/supragya/tendermint_connector/chains/tendermint_34"
 )
 
 var peerPort, rpcPort, marlinPort, listenPortPeer int
@@ -85,6 +86,9 @@ func findAndRunDataConnectHandler(node chains.NodeType,
 	case cosmos.ServicedTMCore:
 		log.Info("Attaching Cosmos-3 TM Handler to service given TM core")
 		cosmos.RunDataConnect(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
+	case tendermint_34.ServicedTMCore:
+		log.Info("Attaching tendermint(.34) Handler to service given TM core")
+		tendermint_34.RunDataConnect(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
 	default:
 		log.Error("Cannot find any handler for ", node)
 		return
@@ -104,6 +108,9 @@ func findAndRunSpamFilterHandler(node chains.NodeType,
 	case cosmos.ServicedTMCore:
 		log.Info("Attaching Cosmos-3 TM spamfilter")
 		cosmos.RunSpamFilter(rpcAddr, marlinTo, marlinFrom)
+	case cosmos.ServicedTMCore:
+		log.Info("Attaching tendermint(.34) spamfilter")
+		tendermint_34.RunSpamFilter(rpcAddr, marlinTo, marlinFrom)
 	default:
 		log.Error("Cannot find any spamfilter for ", node)
 		return
