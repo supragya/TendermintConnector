@@ -21,9 +21,9 @@ import(
 		log "githun.com/sirupsen/logrus"
 		"github.com/hashicorp/golang-lru"
 		"github.com/supragya/tendermint_connector/chains"
-		"github.com/supragya/tendermint_connector/chains/tendermint_.34/conn"
-		cmn "github.com/supragya/tendermint_connector/chains/tendermint_.34/libs/common"
-		flow "github.com/supragya/tendermint_connector/chains/tendermint_.34/libs/flowrate"
+		"github.com/supragya/tendermint_connector/chains/tendermint_34/conn"
+		cmn "github.com/supragya/tendermint_connector/chains/tendermint_34/libs/common"
+		flow "github.com/supragya/tendermint_connector/chains/tendermint_34/libs/flowrate"
 		marlinTypes "github.com/supragya/tendermint_connector/types"
 		amino "github.com/tendermint/go-amino"
 		"github.com/tendermint/tendermint/crypto/ed25519"
@@ -42,7 +42,7 @@ func RunDataConnect(peerAddr string,
 	isConnectionOutgoing bool,
 	keyFile string,
 	listenPort int) {
-	log.Info("Starting  Tendermint(.34) Core Handler - 0.16.3-d83fc038-2-mainnet")
+	log.Info("Starting  Tendermint(.34) Core Handler")
 
 	if keyFile != "" {
 		isKeyFileUsed = true
@@ -391,13 +391,13 @@ var keyFileLocation string
 var privateKey ed25519.PrivKeyEd25519
 
 func GenerateKeyFile(fileLocation string) {
-	log.Info("Generating KeyPair for tendermint_.34-0.16.3-mainnet")
+	log.Info("Generating KeyPair for tendermint_.34-")
 
 	privateKey := ed25519.GenPrivKey()
 	publicKey := privateKey.PubKey()
 
 	key := keyData{
-		Chain:            "tendermint_.34-0.16.3-mainnet",
+		Chain:            "tendermint_.34",
 		IdString:         string(hex.EncodeToString(publicKey.Address())),
 		PrivateKeyString: string(hex.EncodeToString(privateKey[:])),
 		PublicKeyString:  string(hex.EncodeToString(publicKey.Bytes())),
@@ -438,7 +438,7 @@ func VerifyKeyFile(fileLocation string) (bool, error) {
 	json.Unmarshal(byteValue, &key)
 
 	// TODO Check these conditions, add more checks - v0.2 prerelease
-	if key.Chain == "tendermint_.34-0.16.3-mainnet" && string(hex.EncodeToString(key.PrivateKey[:])) == key.PrivateKeyString {
+	if key.Chain == "tendermint_.34" && string(hex.EncodeToString(key.PrivateKey[:])) == key.PrivateKeyString {
 		log.Info("Integrity for KeyFile: ", fileLocation, " checked. Integrity OK.")
 		return true, nil
 	} else {
@@ -493,9 +493,9 @@ func createTMHandler(peerAddr string,
 	isConnectionOutgoing bool,
 	listenPort int,
 	isDataConnect bool) (TendermintHandler, error) {
-	chainId, ok := marlinTypes.ServicedChains["tendermint_.34-0.16.3-mainnet"]
+	chainId, ok := marlinTypes.ServicedChains["tendermint_.34"]
 	if !ok {
-		return TendermintHandler{}, errors.New("Cannot find tendermint_.34-0.16.3-mainnet in list of serviced chains by marlin connector")
+		return TendermintHandler{}, errors.New("Cannot find tendermint_.34 in list of serviced chains by marlin connector")
 	}
 
 	privateKey := getPrivateKey()
