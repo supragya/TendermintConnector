@@ -25,7 +25,7 @@ import(
 		cmn "github.com/supragya/tendermint_connector/chains/tendermint_34/libs/common"
 		flow "github.com/supragya/tendermint_connector/chains/tendermint_34/libs/flowrate"
 		marlinTypes "github.com/supragya/tendermint_connector/types"
-		amino "github.com/tendermint/go-amino"
+		proto3 "github.com/golang/protobuf"
 		"github.com/tendermint/tendermint/crypto/ed25519"
 
 		// Protocols
@@ -118,12 +118,502 @@ func (h *TendermintHandler) acceptPeer() error {
 	return nil
 }
 
-// TO DO
+func (h *TendermintHandler) upgradeConnectionAndHandshake() error {
+	var err error
+	h.secretConnection, err = conn.MakeSecretConnection(h.baseConnection, h.privateKey)
+	if err != nil {
+		return err
+	}
+
+	err = h.handshake()
+	if err != nil {
+		return err
+	}
+
+	log.Info("Established connection with TM peer [" +
+		string(hex.EncodeToString(h.secretConnection.RemotePubKey().Address())) +
+		"] a.k.a. " + h.peerNodeInfo.Moniker)
+	return nil
+}
+
+func (h *TendermintHandler) handshake() error {
+	var (
+		errc                        = make(chan error, 2)
+		ourNodeInfo DefaultNodeInfo = DefaultNodeInfo{
+			ProtocolVersion{App: 2, Block: 9, P2P: 5},
+			string(hex.EncodeToString(h.privateKey.PubKey().Address())),
+			"tcp://127.0.0.1:20006", 
+			"tendermint_34",
+			"0.34.0",
+			[]byte{channelBc, channelCsSt, channelCsDc, channelCsVo,
+				channelCsVs, channelMm, channelEv},
+			"marlin-tendermint-connector",
+			DefaultNodeInfoOther{"on", "tcp://0.0.0.0:26667"}, 
+		}
+	)
+	go func(errc chan<- error, c net.Conn) {
+		_, err := h.codec.MarshalText(c, ourNodeInfo)
+		if err != nil {
+			log.Error("Error encountered while sending handshake message")
+		}
+		errc <- err
+	}(errc, h.secretConnection)
+	go func(errc chan<- error, c net.Conn) {
+		_, err := h.codec.UnmarshalText(c,&h.peerNodeInfo)                         //to check
+		if err != nil {
+			log.Error("Error encountered while recieving handshake message")
+		}
+		errc <- err
+	}(errc, h.secretConnection)
+
+	for i := 0; i < cap(errc); i++ {
+		err := <-errc
+		if err != nil {
+			log.Error("Encountered error in handshake with TM core: ", err)
+			return err
+		}
+	}
+	return nil
+}
 
 
+func (h *TendermintHandler) beginServicing() error {
+	// Register Messages
+	RegisterPacket(h.codec)
+	RegisterConsensusMessages(h.codec)
 
+	// Create a P2P Connection
+	h.p2pConnection = P2PConnection{
+		conn:            h.secretConnection,
+		bufConnReader:   bufio.NewReaderSize(h.secretConnection, 65535),
+		bufConnWriter:   bufio.NewWriterSize(h.secretConnection, 65535),
+		sendMonitor:     flow.New(0, 0),
+		recvMonitor:     flow.New(0, 0),
+		send:            make(chan struct{}, 1),
+		pong:            make(chan struct{}, 1),
+		doneSendRoutine: make(chan struct{}, 1),
+		quitSendRoutine: make(chan struct{}, 1),
+		quitRecvRoutine: make(chan struct{}, 1),
+		flushTimer:      cmn.NewThrottleTimer("flush", 100*time.Millisecond),
+		pingTimer:       time.NewTicker(30 * time.Second),
+		pongTimeoutCh:   make(chan bool, 1),
+	}
 
+	// Start P2P Send and recieve routines + Status messages for message throughput
+	go h.sendRoutine()
+	go h.recvRoutine()
+	go h.throughput.presentThroughput(5, h.signalShutThroughput)
 
+	// Allow tenderment.34 version messages from marlin Relay
+	marlin.AllowServicedChainMessages(h.servicedChainId)
+	return nil
+}
+
+func (h *TendermintHandler) sendRoutine() {
+	log.Info("TMCore <- Connector Routine Started")
+
+	for {
+	SELECTION:
+		select {
+
+		case <-h.p2pConnection.pingTimer.C: // Send PING messages to TMCore
+			_n, err := h.codec.MarshalText(h.p2pConnection.bufConnWriter, PacketPing{})
+			if err != nil {
+				break SELECTION
+			}
+			h.p2pConnection.sendMonitor.Update(int(_n))
+			h.p2pConnection.pongTimer = time.AfterFunc(60*time.Second, func() {
+				select {
+				case h.p2pConnection.pongTimeoutCh <- true:
+				default:
+				}
+			})
+
+			err = h.p2pConnection.bufConnWriter.Flush()
+			if err != nil {
+				log.Error("Cannot flush buffer PingTimer: ", err)
+				h.signalConnError <- struct{}{}
+			}
+
+		case <-h.p2pConnection.pong: // Send PONG messages to TMCore
+			_n, err := h.codec.MarshalText(h.p2pConnection.bufConnWriter, PacketPong{})
+			if err != nil {
+				log.Error("Cannot send Pong message: ", err)
+				break SELECTION
+			}
+			h.p2pConnection.sendMonitor.Update(int(_n))
+			err = h.p2pConnection.bufConnWriter.Flush()
+			if err != nil {
+				log.Error("Cannot flush buffer: ", err)
+				h.signalConnError <- struct{}{}
+			}
+
+		case timeout := <-h.p2pConnection.pongTimeoutCh: // Check if PONG messages are received in time
+			if timeout {
+				log.Error("Pong timeout, TM Core did not reply in time!")
+				h.p2pConnection.stopPongTimer()
+				h.signalConnError <- struct{}{}
+			} else {
+				h.p2pConnection.stopPongTimer()
+			}
+
+		case <-h.signalShutSend: // Signal to Shut down sendRoutine
+			log.Info("node <- Connector Routine shutdown")
+			h.p2pConnection.stopPongTimer()
+			close(h.p2pConnection.doneSendRoutine)
+			return
+
+		case marlinMsg := <-h.marlinFrom: // Actual message packets from Marlin Relay (encoded in Marlin Tendermint Data Transfer Protocol v1)
+			switch marlinMsg.Channel {
+			case channelCsSt:
+				msg, err:= h.decodeConsensusMsgFromChannelBuffer(marlinMsg.Packets)
+				if err != nil {
+					log.Debug("Cannot decode message recieved from marlin to a valid Consensus Message: ", err)
+				} else {
+					switch msg.(type) {
+					case *NewRoundStepMessage:
+						for _, pkt := range marlinMsg.Packets {
+							_n, err := h.codec.MarshalBinaryLengthPrefixedWriter(
+								h.p2pConnection.bufConnWriter,
+								PacketMsg{
+									ChannelID: byte(pkt.ChannelID),
+									EOF:       byte(pkt.EOF),
+									Bytes:     pkt.Bytes,
+								})
+							if err != nil {
+								log.Error("Error occurred in sending data to TMCore: ", err)
+								h.signalConnError <- struct{}{}
+							}
+							h.p2pConnection.sendMonitor.Update(int(_n))
+							err = h.p2pConnection.bufConnWriter.Flush()
+							if err != nil {
+								log.Error("Cannot flush buffer: ", err)
+								h.signalConnError <- struct{}{}
+							}
+						}
+						h.throughput.putInfo("to", "+CsStNRS", uint32(len(marlinMsg.Packets)))
+					default:
+						h.throughput.putInfo("to", "-CsStUNK", uint32(len(marlinMsg.Packets)))
+					}
+				}
+
+			case channelCsVo:
+				msg, err:= h.decodeConsensusMsgFromChannelBuffer(marlinMsg.Packets)
+				if err != nil {
+					log.Debug("Cannot decode message recieved from marlin to a valid Consensus Message: ", err)
+				} else {
+					switch msg.(type) {
+					case *VoteMessage:
+						for _, pkt := range marlinMsg.Packets {
+							_n, err := h.codec.MarshalText(
+								h.p2pConnection.bufConnWriter,
+								PacketMsg{
+									ChannelID: byte(pkt.ChannelID),
+									EOF:       byte(pkt.EOF),
+									Bytes:     pkt.Bytes,
+								})
+							if err != nil {
+								log.Error("Error occurred in sending data to TMCore: ", err)
+								h.signalConnError <- struct{}{}
+							}
+							h.p2pConnection.sendMonitor.Update(int(_n))
+							err = h.p2pConnection.bufConnWriter.Flush()
+							if err != nil {
+								log.Error("Cannot flush buffer: ", err)
+								h.signalConnError <- struct{}{}
+							}
+						}
+						h.throughput.putInfo("to", "+CsVoVOT", uint32(len(marlinMsg.Packets)))
+					default:
+						h.throughput.putInfo("to", "-CsVoUNK", uint32(len(marlinMsg.Packets)))
+					}
+				}
+
+			case channelCsDc:
+				msg, err:= h.decodeConsensusMsgFromChannelBuffer(marlinMsg.Packets)
+				if err != nil {
+					log.Debug("Cannot decode message recieved from marlin to a valid Consensus Message: ", err)
+				} else {
+					switch msg.(type) {
+					case *ProposalMessage:
+						for _, pkt := range marlinMsg.Packets {
+							_n, err := h.codec.MarshalText(
+								h.p2pConnection.bufConnWriter,
+								PacketMsg{
+									ChannelID: byte(pkt.ChannelID),
+									EOF:       byte(pkt.EOF),
+									Bytes:     pkt.Bytes,
+								})
+							if err != nil {
+								log.Error("Error occurred in sending data to TMCore: ", err)
+								h.signalConnError <- struct{}{}
+							}
+							h.p2pConnection.sendMonitor.Update(int(_n))
+							err = h.p2pConnection.bufConnWriter.Flush()
+							if err != nil {
+								log.Error("Cannot flush buffer: ", err)
+								h.signalConnError <- struct{}{}
+							}
+						}
+						h.throughput.putInfo("to", "+CsDcPRP", uint32(len(marlinMsg.Packets)))
+					case *ProposalPOLMessage:
+						// Not serviced
+					case *BlockPartMessage:
+						for _, pkt := range marlinMsg.Packets {
+							_n, err := h.codec.MarshalText(
+								h.p2pConnection.bufConnWriter,
+								PacketMsg{
+									ChannelID: byte(pkt.ChannelID),
+									EOF:       byte(pkt.EOF),
+									Bytes:     pkt.Bytes,
+								})
+							if err != nil {
+								log.Error("Error occurred in sending data to TMCore: ", err)
+								h.signalConnError <- struct{}{}
+							}
+							h.p2pConnection.sendMonitor.Update(int(_n))
+							err = h.p2pConnection.bufConnWriter.Flush()
+							if err != nil {
+								log.Error("Cannot flush buffer: ", err)
+								h.signalConnError <- struct{}{}
+							}
+						}
+						h.throughput.putInfo("to", "+CsDcBPM", uint32(len(marlinMsg.Packets)))
+					default:
+						h.throughput.putInfo("to", "-CsDcUNK", uint32(len(marlinMsg.Packets)))
+					}
+				}
+			default:
+				h.throughput.putInfo("to", "-UnkUNK", uint32(len(marlinMsg.Packets)))
+				log.Debug("TMCore <- connector Not servicing undecipherable channel ", marlinMsg.Channel)
+			}
+		}
+	}
+}
+
+func (h *TendermintHandler) recvRoutine() {
+	log.Info("TMCore -> Connector Routine Started")
+
+FOR_LOOP:
+	for {
+		select {
+		case <-h.signalShutRecv:
+			log.Info("TMCore -> Connector Routine shutdown")
+			break FOR_LOOP
+		default:
+		}
+		h.p2pConnection.recvMonitor.Limit(20000, 5120000, true)
+
+		/*
+			Peek into bufConnReader for debugging
+			if numBytes := c.bufConnReader.Buffered(); numBytes > 0 {
+				bz, err := c.bufConnReader.Peek(cmn.MinInt(numBytes, 100))
+				if err == nil {
+					// return
+				} else {
+					log.Debug("Error peeking connection buffer ", "err ", err)
+					// return nil
+				}
+				log.Info("Peek connection buffer ", "numBytes ", numBytes, " bz ", bz)
+			}
+		*/
+
+		// Read packet type
+		var packet Packet
+		_n, err := h.codec.UnmarshalText(
+			h.p2pConnection.bufConnReader,
+			&packet,
+			int64(20000))
+
+		h.p2pConnection.recvMonitor.Update(int(_n))
+
+		// Unmarshalling test
+		if err != nil {
+			if err == io.EOF {
+				log.Error("TMCore -> Connector Connection is closed (likely by the other side)")
+			} else {
+				log.Error("TMCore -> Connector Connection failed (reading byte): ", err)
+			}
+			h.signalConnError <- struct{}{}
+			break FOR_LOOP
+		}
+
+		// Read more depending on packet type.
+		switch pkt := packet.(type) {
+		case PacketPing: // Received PING messages from TMCore
+			select {
+			case h.p2pConnection.pong <- PacketPong{}:
+			default:
+			}
+
+		case PacketPong: // Received PONG messages from TMCore
+			select {
+			case h.p2pConnection.pongTimeoutCh <- false:
+			default:
+			}
+
+		case PacketMsg: // Actual message packets from TMCore
+			switch pkt.ChannelID {
+			case channelBc:
+				h.throughput.putInfo("from", "=BcMSG", 1)
+				log.Debug("TMCore -> Connector Blockhain is not serviced")
+			case channelCsSt:
+				h.channelBuffer[channelCsSt] = append(h.channelBuffer[channelCsSt],
+					marlinTypes.PacketMsg{
+						ChannelID: uint32(pkt.ChannelID),
+						EOF:       uint32(pkt.EOF),
+						Bytes:     pkt.Bytes,
+					})
+
+				if pkt.EOF == byte(0x01) {
+					msg, err := h.decodeConsensusMsgFromChannelBuffer(h.channelBuffer[channelCsSt])
+					if err != nil {
+						log.Error("Cannot decode message recieved from TMCore to a valid Consensus Message: ", err)
+					} else {
+						message := marlinTypes.MarlinMessage{
+							ChainID: h.servicedChainId,
+							Channel: channelCsSt,
+							Packets: h.channelBuffer[channelCsSt],
+						}
+
+						switch msg.(type) {
+						// Only NRS is sent forward
+						case *NewRoundStepMessage:
+							select {
+							case h.marlinTo <- message:
+							default:
+								log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
+								_ = <-h.marlinTo
+								h.marlinTo <- message
+							}
+							select {
+							case h.marlinFrom <- message:
+							default:
+								log.Warning("Too many messages in channel marlinFrom. Dropping oldest messages")
+								_ = <-h.marlinFrom
+								h.marlinFrom <- message
+							}
+							h.throughput.putInfo("from", "+CsStNRS", uint32(len(h.channelBuffer[channelCsSt])))
+						case *NewValidBlockMessage:
+							// h.throughput.putInfo("from", "=CsStNVB", uint32(len(h.channelBuffer[channelCsSt])))
+						case *HasVoteMessage:
+							// h.throughput.putInfo("from", "=CsStHVM", uint32(len(h.channelBuffer[channelCsSt])))
+						case *VoteSetMaj23Message:
+							// h.throughput.putInfo("from", "=CsStM23", uint32(len(h.channelBuffer[channelCsSt])))
+						default:
+							h.throughput.putInfo("from", "-CsStUNK", uint32(len(h.channelBuffer[channelCsSt])))
+						}
+					}
+					h.channelBuffer[channelCsSt] = h.channelBuffer[channelCsSt][:0]
+				}
+			case channelCsDc:
+				h.channelBuffer[channelCsDc] = append(h.channelBuffer[channelCsDc],
+					marlinTypes.PacketMsg{
+						ChannelID: uint32(pkt.ChannelID),
+						EOF:       uint32(pkt.EOF),
+						Bytes:     pkt.Bytes,
+					})
+				if pkt.EOF == byte(0x01) {
+					msg, err := h.decodeConsensusMsgFromChannelBuffer(h.channelBuffer[channelCsDc])
+					if err != nil {
+						log.Error("Cannot decode message recieved from TMCore to a valid Consensus Message: ", err)
+					} else {
+						message := marlinTypes.MarlinMessage{
+							ChainID: h.servicedChainId,
+							Channel: channelCsDc,
+							Packets: h.channelBuffer[channelCsDc],
+						}
+
+						switch msg.(type) {
+						case *ProposalMessage:
+							select {
+							case h.marlinTo <- message:
+							default:
+								log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
+								_ = <-h.marlinTo
+								h.marlinTo <- message
+							}
+							h.throughput.putInfo("from", "+CsDcPRP", uint32(len(h.channelBuffer[channelCsDc])))
+						case *ProposalPOLMessage:
+							// Not serviced
+						case *BlockPartMessage:
+							select {
+							case h.marlinTo <- message:
+							default:
+								log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
+								_ = <-h.marlinTo
+								h.marlinTo <- message
+							}
+							h.throughput.putInfo("from", "+CsDcBPM", uint32(len(h.channelBuffer[channelCsDc])))
+						default:
+							h.throughput.putInfo("from", "-CsDcMSG", uint32(len(h.channelBuffer[channelCsDc])))
+						}
+					}
+					h.channelBuffer[channelCsDc] = h.channelBuffer[channelCsDc][:0]
+					
+				}
+			case channelCsVo:
+				h.channelBuffer[channelCsVo] = append(h.channelBuffer[channelCsVo],
+					marlinTypes.PacketMsg{
+						ChannelID: uint32(pkt.ChannelID),
+						EOF:       uint32(pkt.EOF),
+						Bytes:     pkt.Bytes,
+					})
+				if pkt.EOF == byte(0x01) {
+					msg, err := h.decodeConsensusMsgFromChannelBuffer(h.channelBuffer[channelCsVo])
+					if err != nil {
+						log.Error("Cannot decode message recieved from TMCore to a valid Consensus Message: ", err)
+					} else {
+						message := marlinTypes.MarlinMessage{
+							ChainID: h.servicedChainId,
+							Channel: channelCsVo,
+							Packets: h.channelBuffer[channelCsVo],
+						}
+
+						switch msg.(type) {
+						case *VoteMessage:
+							select {
+							case h.marlinTo <- message:
+							default:
+								log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
+								_ = <-h.marlinTo
+								h.marlinTo <- message
+							}
+							h.throughput.putInfo("from", "+CsVoVOT", uint32(len(h.channelBuffer[channelCsVo])))
+						default:
+							h.throughput.putInfo("from", "-CsVoVOT", uint32(len(h.channelBuffer[channelCsVo])))
+						}
+					}
+					h.channelBuffer[channelCsVo] = h.channelBuffer[channelCsVo][:0]
+				}
+			case channelCsVs:
+				h.throughput.putInfo("from", "=CsVsVSB", 1)
+				log.Debug("TMCore -> Connector Consensensus Vote Set Bits Channel is not serviced")
+			case channelMm:
+				h.throughput.putInfo("from", "=MmMSG", 1)
+				log.Debug("TMCore -> Connector Mempool Channel is not serviced")
+			case channelEv:
+				h.throughput.putInfo("from", "=EvMSG", 1)
+				log.Debug("TMCore -> Connector Evidence Channel is not serviced")
+			default:
+				h.throughput.putInfo("from", "=UnkUNK", 1)
+				log.Warning("TMCore -> Connector Unknown ChannelID Message recieved: ", pkt.ChannelID)
+			}
+
+		default:
+			log.Error("TMCore -> Connector Unknown message type ", reflect.TypeOf(packet))
+			log.Error("TMCore -> Connector Connection failed: ", err)
+			h.signalConnError <- struct{}{}
+			break FOR_LOOP
+		}
+	}
+
+	// Cleanup
+	close(h.p2pConnection.pong)
+	for range h.p2pConnection.pong {
+		// Drain
+	}
+}
 
 
 
@@ -305,7 +795,7 @@ func (h *TendermintHandler) thoroughMessageCheck(msg ConsensusMessage) bool {
 
 //TO DO signbytea
 thoroughMessageCheck
-func (vote *Vote) SignBytes(chainID string, cdc *amino.Codec) []byte {         		
+func (vote *Vote) SignBytes(chainID string, cdc *proto3.Codec) []byte {         		
 	bz, err := cdc.MarshalBinaryLengthPrefixed(CanonicalizeVote(chainID, vote))
 	if err != nil {
 		panic(err)
@@ -512,7 +1002,7 @@ func createTMHandler(peerAddr string,
 		peerAddr:             peerAddr,
 		rpcAddr:              rpcAddr,
 		privateKey:           privateKey,
-		codec:                amino.NewCodec(),
+		codec:                proto3.NewCodec(),
 		validatorCache:		  vCache,
 		marlinTo:             marlinTo,
 		marlinFrom:           marlinFrom,
@@ -569,7 +1059,6 @@ func (t *throughPutData) presentThroughput(sec time.Duration, shutdownCh chan st
 // --- EXTRAS
 
 
-// Canonical* wraps the structs in types for amino encoding them for use in SignBytes / the Signable interface.
 // TimeFormat is used for generating the sigs
 // const TimeFormat = time.RFC3339Nano
 
@@ -623,7 +1112,7 @@ func CanonicalizeProposal(chainID string, proposal *Proposal) CanonicalProposal 
 	return CanonicalProposal{
 		Type:      byte(0x20),
 		Height:    proposal.Height,
-		Round:     int64(proposal.Round), // cast int->int64 to make amino encode it fixed64 (does not work for int)
+		Round:     int64(proposal.Round), // cast int->int64 to make proto3 encode it fixed64 (does not work for int)
 		POLRound:  int64(proposal.POLRound),
 		BlockID:   CanonicalizeBlockID(proposal.BlockID),
 		Timestamp: proposal.Timestamp,
@@ -635,7 +1124,7 @@ func CanonicalizeVote(chainID string, vote *Vote) CanonicalVote {
 	return CanonicalVote{
 		Type:      vote.Type,
 		Height:    vote.Height,
-		Round:     int64(vote.Round), // cast int->int64 to make amino encode it fixed64 (does not work for int)
+		Round:     int64(vote.Round), // cast int->int64 to make proto3 encode it fixed64 (does not work for int)
 		Timestamp: vote.Timestamp,
 		BlockID:   CanonicalizeBlockID(vote.BlockID),
 		ChainID:   chainID,
