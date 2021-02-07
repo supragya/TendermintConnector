@@ -4,7 +4,8 @@ import (
 	"net"
 	"sync"
 
-	proto3 "github.com/golang/protobuf"
+	"github.com/gogo/protobuf/proto"
+	tmp2p "github.com/tendermint/tendermint/proto/p2p"
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/supragya/tendermint_connector/chains/irisnet/conn"
@@ -18,7 +19,6 @@ type TendermintHandler struct {
 	peerAddr             string
 	rpcAddr              string
 	privateKey           ed25519.PrivKeyEd25519
-	codec                *proto3  //todo(cdc file )
 	baseConnection       net.Conn
 	validatorCache		 *lru.TwoQueueCache
 	maxValidHeight 			int64
@@ -33,6 +33,8 @@ type TendermintHandler struct {
 	signalShutSend       chan struct{}
 	signalShutRecv       chan struct{}
 	signalShutThroughput chan struct{}
+	//no codec file needed, In protobuf the codec file could be considered as
+	// proto file that is declared in github.com/gogo/protobuf/proto
 }
 
 type throughPutData struct {

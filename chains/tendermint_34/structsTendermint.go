@@ -1,4 +1,4 @@
-package irisnet
+package tendermint_34
 
 import (
 	"net"
@@ -8,7 +8,8 @@ import (
 	"time"
 	"errors"
 
-	proto3 "github.com/golang/protobuf"
+	"github.com/gogo/protobuf/proto"
+	tmp2p "github.com/tendermint/tendermint/proto/p2p"
 	cmn "github.com/supragya/tendermint_connector/chains/irisnet/libs/common"
 	flow "github.com/supragya/tendermint_connector/chains/irisnet/libs/flowrate"
 	"github.com/tendermint/tendermint/crypto/merkle"
@@ -88,12 +89,23 @@ type Packet interface {
 	AssertIsPacket()
 }
 
-func RegisterPacket(cdc *proto3) {
-	cdc.RegisterInterface((*Packet)(nil), nil)
-	cdc.RegisterConcrete(PacketPing{}, "tendermint/p2p/PacketPing", nil)
-	cdc.RegisterConcrete(PacketPong{}, "tendermint/p2p/PacketPong", nil)
-	cdc.RegisterConcrete(PacketMsg{}, "tendermint/p2p/PacketMsg", nil)
+func RegisterPacket(pb proto.Packet) []byte {
+	pkt = tmp2p.Packet{}
+	switch pb := pb.(type){
+	case *tmp2p.PacketPing:
+		pkt.Sum = &tmp2p.PacketPing{PacketPing: pb}
+	case *tmp2p.PacketPong:
+		pkt.Sum = &tmp2p.PacketPong{PacketPong: pb}
+	case *tmp2p.PacketMsg:
+		pkt.Sum = &tmp2p.PacketMsg{PacketMsg: pb}
+
+	bz, err := proto.Marshal(&pkt)
+	if err != nil {
+		panic(fmt.Errorf("unable to marshal %T: %w", pb, err))
+	}
+	return bz
 }
+
 
 func (_ PacketPing) AssertIsPacket() {}
 func (_ PacketPong) AssertIsPacket() {}
@@ -120,17 +132,33 @@ type ConsensusMessage interface {
 	ValidateBasic() error
 }
 
-func RegisterConsensusMessages(cdc *proto3) {
-	cdc.RegisterInterface((*ConsensusMessage)(nil), nil)
-	cdc.RegisterConcrete(&NewRoundStepMessage{}, "tendermint/NewRoundStepMessage", nil)
-	cdc.RegisterConcrete(&NewValidBlockMessage{}, "tendermint/NewValidBlockMessage", nil)
-	cdc.RegisterConcrete(&ProposalMessage{}, "tendermint/Proposal", nil)
-	cdc.RegisterConcrete(&ProposalPOLMessage{}, "tendermint/ProposalPOL", nil)
-	cdc.RegisterConcrete(&BlockPartMessage{}, "tendermint/BlockPart", nil)
-	cdc.RegisterConcrete(&VoteMessage{}, "tendermint/Vote", nil)
-	cdc.RegisterConcrete(&HasVoteMessage{}, "tendermint/HasVote", nil)
-	cdc.RegisterConcrete(&VoteSetMaj23Message{}, "tendermint/VoteSetMaj23", nil)
-	cdc.RegisterConcrete(&VoteSetBitsMessage{}, "tendermint/VoteSetBits", nil)
+func RegisterConsensusMessages(pb proto.Message) []byte{
+	msg = tmp2p.Message{}
+	switch pb := pb.(type){
+	case *tmp2p.NewRoundStep:
+		msg.Sum = &tmp2p.Message_NewRoundStep{NewRoundStep: pb}
+	case *tmp2p.NewValidBlock:
+		msg.Sum = &tmp2p.Message_NewValidBlock{NewValidBlock: pb}
+	case *tmp2p.Proposal:
+		msg.Sum = &tmp2p.Message_Proposal{Proposal: pb}
+	case *tmp2p.ProposalPOL:
+		msg.Sum = &tmp2p.Message_ProposalPOL{ProposalPOL: pb}
+	case *tmp2p.BlockPart:
+		msg.Sum = &tmp2p.Message_BlockPart{BlockPart: pb}
+	case *tmp2p.Vote:
+		msg.Sum = &tmp2p.Message_Vote{Vote: pb}
+	case *tmp2p.HasVote:
+		msg.Sum = &tmp2p.HasVote{HasVote: pb}
+	case *tmp2p.VoteSetMaj23:
+		msg.Sum = &tmp2p.VoteSetMaj23{VoteSetMaj23: pb}
+	case *tmp2p.VoteSetBits:
+		msg.Sum = &tmp2p.VoteSetBits{VoteSetBits: pb}
+	bz, err := proto.Marshal(&msg)
+
+	if err != nil {
+		panic(fmt.Errorf("unable to marshal %T: %w", pb, err))
+	}
+	return bz
 }
 
 //-------------------------------------
