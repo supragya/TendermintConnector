@@ -18,6 +18,8 @@ import(
 		"net/http"
 		"io/ioutil"
 
+		"github.com/gogo/protobuf/proto"
+		tmp2p "github.com/tendermint/tendermint/proto/p2p"
 		log "githun.com/sirupsen/logrus"
 		"github.com/hashicorp/golang-lru"
 		"github.com/supragya/tendermint_connector/chains"
@@ -25,16 +27,19 @@ import(
 		cmn "github.com/supragya/tendermint_connector/chains/tendermint_34/libs/common"
 		flow "github.com/supragya/tendermint_connector/chains/tendermint_34/libs/flowrate"
 		marlinTypes "github.com/supragya/tendermint_connector/types"
-		proto3 "github.com/golang/protobuf"
 		"github.com/tendermint/tendermint/crypto/ed25519"
+
 
 		// Protocols
 		"github.com/supragya/tendermint_connector/marlin"
 )
 
+// ServicedTMCore is a string associated with each TM core handler
+// to decipher which handler is to be attached.
+var ServicedTMCore chains.NodeType = chains.NodeType{Version: "0.34.0", Network: "tendermint", ProtocolVersionApp: "2", ProtocolVersionBlock: "9", ProtocolVersionP2p: "5"}
 
+// ---------------------- DATA CONNECT INTERFACE --------------------------------
 
-var ServicedTMCore chains.NodeType = chains.NodeType()
 
 func RunDataConnect(peerAddr string,
 	marlinTo chan marlinTypes.MarlinMessage,
@@ -42,7 +47,7 @@ func RunDataConnect(peerAddr string,
 	isConnectionOutgoing bool,
 	keyFile string,
 	listenPort int) {
-	log.Info("Starting  Tendermint(.34) Core Handler")
+	log.Info("Starting Tendermint(.34) Core Handler")
 
 	if keyFile != "" {
 		isKeyFileUsed = true
@@ -152,14 +157,14 @@ func (h *TendermintHandler) handshake() error {
 		}
 	)
 	go func(errc chan<- error, c net.Conn) {
-		_, err := h.codec.MarshalText(c, ourNodeInfo)
+		_, err := h.proto.MarshalText(c, ourNodeInfo)
 		if err != nil {
 			log.Error("Error encountered while sending handshake message")
 		}
 		errc <- err
 	}(errc, h.secretConnection)
 	go func(errc chan<- error, c net.Conn) {
-		_, err := h.codec.UnmarshalText(c,&h.peerNodeInfo)                         //to check
+		_, err := h.proto.UnmarshalText(c,&h.peerNodeInfo)                         //to check
 		if err != nil {
 			log.Error("Error encountered while recieving handshake message")
 		}
@@ -179,8 +184,10 @@ func (h *TendermintHandler) handshake() error {
 
 func (h *TendermintHandler) beginServicing() error {
 	// Register Messages
-	RegisterPacket(h.codec)
-	RegisterConsensusMessages(h.codec)
+	EncodePacket(h.protobuf)
+	EncodeConsensusMessages(h.protobuf)
+	DecodePacket(h.protobuf)
+	DecodeConsensusMessages(h.protobuf)
 
 	// Create a P2P Connection
 	h.p2pConnection = P2PConnection{
@@ -216,8 +223,8 @@ func (h *TendermintHandler) sendRoutine() {
 	SELECTION:
 		select {
 
-		case <-h.p2pConnection.pingTimer.C: // Send PING messages to TMCore
-			_n, err := h.codec.MarshalText(h.p2pConnection.bufConnWriter, PacketPing{})
+		case <-h.p2pConnection.pingTimer.C: // Send PING messages to TMCore		
+			_n, err := h.protobuf.EncodePacket(h.p2pConnection.bufConnWriter, PacketPing{})
 			if err != nil {
 				break SELECTION
 			}
@@ -236,7 +243,7 @@ func (h *TendermintHandler) sendRoutine() {
 			}
 
 		case <-h.p2pConnection.pong: // Send PONG messages to TMCore
-			_n, err := h.codec.MarshalText(h.p2pConnection.bufConnWriter, PacketPong{})
+			_n, err := h.protobuf.EncodePacket(h.p2pConnection.bufConnWriter, PacketPong{})
 			if err != nil {
 				log.Error("Cannot send Pong message: ", err)
 				break SELECTION
@@ -273,7 +280,7 @@ func (h *TendermintHandler) sendRoutine() {
 					switch msg.(type) {
 					case *NewRoundStepMessage:
 						for _, pkt := range marlinMsg.Packets {
-							_n, err := h.codec.MarshalBinaryLengthPrefixedWriter(
+							_n, err := h.protobuf.EncodePacket(
 								h.p2pConnection.bufConnWriter,
 								PacketMsg{
 									ChannelID: byte(pkt.ChannelID),
@@ -305,7 +312,7 @@ func (h *TendermintHandler) sendRoutine() {
 					switch msg.(type) {
 					case *VoteMessage:
 						for _, pkt := range marlinMsg.Packets {
-							_n, err := h.codec.MarshalText(
+							_n, err := h.protobuf.EncodePacket(
 								h.p2pConnection.bufConnWriter,
 								PacketMsg{
 									ChannelID: byte(pkt.ChannelID),
@@ -337,7 +344,7 @@ func (h *TendermintHandler) sendRoutine() {
 					switch msg.(type) {
 					case *ProposalMessage:
 						for _, pkt := range marlinMsg.Packets {
-							_n, err := h.codec.MarshalText(
+							_n, err := h.protobuf.EncodePacket(
 								h.p2pConnection.bufConnWriter,
 								PacketMsg{
 									ChannelID: byte(pkt.ChannelID),
@@ -360,7 +367,7 @@ func (h *TendermintHandler) sendRoutine() {
 						// Not serviced
 					case *BlockPartMessage:
 						for _, pkt := range marlinMsg.Packets {
-							_n, err := h.codec.MarshalText(
+							_n, err := h.protobuf.EncodePacket(
 								h.p2pConnection.bufConnWriter,
 								PacketMsg{
 									ChannelID: byte(pkt.ChannelID),
@@ -420,7 +427,7 @@ FOR_LOOP:
 
 		// Read packet type
 		var packet Packet
-		_n, err := h.codec.UnmarshalText(
+		_n, err := h.protobuf.DecodePacket(
 			h.p2pConnection.bufConnReader,
 			&packet,
 			int64(20000))
@@ -629,7 +636,7 @@ func (h *TendermintHandler) decodeConsensusMsgFromChannelBuffer(chanbuf []marlin
 	if len(databuf) > 1048576 {
 		return msg, errors.New("Message is larger than 1MB. Cannot decode")
 	}
-	err = h.codec.UnmarshalBinaryBare(databuf, &msg)
+	err = h.protobuf.DecodePacket(databuf, &msg)
 	return msg, err
 
 
@@ -658,8 +665,10 @@ func RunSpamFilter(rpcAddr string,
 
 	marlin.AllowServicedChainMessages(handler.servicedChainId)
 
-	RegisterPacket(handler.codec)
-	RegisterConsensusMessages(handler.codec)
+	EcnodePacket(handler.protobuf)
+	EncodeConsensusMessages(handler.codec)
+	DecodePacket(handler.protobuf)
+	DecodeConsensusMessages(handler.codec)
 
 	coreCount := runtime.NumCPU()
 	multiple := 2
@@ -793,10 +802,9 @@ func (h *TendermintHandler) thoroughMessageCheck(msg ConsensusMessage) bool {
 	}
 }
 
-//TO DO signbytea
-thoroughMessageCheck
-func (vote *Vote) SignBytes(chainID string, cdc *proto3.Codec) []byte {         		
-	bz, err := cdc.MarshalBinaryLengthPrefixed(CanonicalizeVote(chainID, vote))
+// to do
+func (vote *Vote) SignBytes(chainID string, pb proto) []byte {         		
+	bz, err := proto.MarshalText(CanonicalizeVote(chainID, vote))
 	if err != nil {
 		panic(err)
 	}
@@ -1002,7 +1010,7 @@ func createTMHandler(peerAddr string,
 		peerAddr:             peerAddr,
 		rpcAddr:              rpcAddr,
 		privateKey:           privateKey,
-		codec:                proto3.NewCodec(),
+		protobuf:             proto,
 		validatorCache:		  vCache,
 		marlinTo:             marlinTo,
 		marlinFrom:           marlinFrom,

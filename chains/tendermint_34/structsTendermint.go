@@ -89,7 +89,7 @@ type Packet interface {
 	AssertIsPacket()
 }
 
-func RegisterPacket(pb proto.Packet) []byte {
+func EncodePacket(pb proto.Packet) []byte {
 	pkt = tmp2p.Packet{}
 	switch pb := pb.(type){
 	case *tmp2p.PacketPing:
@@ -104,6 +104,23 @@ func RegisterPacket(pb proto.Packet) []byte {
 		panic(fmt.Errorf("unable to marshal %T: %w", pb, err))
 	}
 	return bz
+}
+
+func DecodePacket(bz []byte) (proto.Packet, error){
+	pb := &tmp2p.Packet{}
+	err := proto.Unmarshal(bz, pb)
+	if err != nil {
+		return nil, err
+	}
+	switch pkt := pb.Sum.(type){
+	case *tmp2p.PacketPing:
+		return pkt.PacketPing, nil
+	case *tmp2p.PacketPong:
+		return pkt.PacketPong, nil
+	case *tmp2p.PacketMsg:
+		return pkt.PacketMsg, nil
+	default:
+		return nil, fmt.Errorf("unknown Packet Type: %T", pkt)
 }
 
 
@@ -132,7 +149,7 @@ type ConsensusMessage interface {
 	ValidateBasic() error
 }
 
-func RegisterConsensusMessages(pb proto.Message) []byte{
+func EncodeConsensusMessages(pb proto.Message) []byte{
 	msg = tmp2p.Message{}
 	switch pb := pb.(type){
 	case *tmp2p.NewRoundStep:
@@ -159,6 +176,35 @@ func RegisterConsensusMessages(pb proto.Message) []byte{
 		panic(fmt.Errorf("unable to marshal %T: %w", pb, err))
 	}
 	return bz
+}
+
+func DecodeConsensusMessages(bz []byte) (proto.Message, error){
+	pb := &tmp2p.Message{}
+	err := proto.Unmarshal(bz, pb)
+	if err != nil {
+		return nil, err
+	}
+	switch msg := pb.Sum.(type) {
+	case *tmp2p.Message_NewRoundStep:
+		return msg.NewRoundStep, nil
+	case *tmp2p.Message_NewValidBlock:
+		return msg.NewValidBlock, nil
+	case *tmp2p.Message_Proposal:
+		return msg.proposal, nil
+	case *tmp2p.Message_ProposalPOL:
+		return msg.ProposalPOL, nil
+	case *tmp2p.Message_BlockPart:
+		return msg.BlockPart, nil
+	case *tmp2p.Message_Vote:
+		return msg.Vote, nil
+	case *tmp2p.HasVote:
+		return msg.HasVote, nil
+	case *tmp2p.VoteSetMaj23:
+		return msg.VoteSetMaj23, nil
+	case *tmp2p.VoteSetBits:
+		return msg.VoteSetBits, nil
+	default:
+		return nil, fmt.Errorf("unknown message: %T", msg)
 }
 
 //-------------------------------------
