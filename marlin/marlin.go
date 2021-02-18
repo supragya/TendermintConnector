@@ -31,6 +31,8 @@ type MarlinHandler struct {
 	marlinConn      *bufio.ReadWriter
 	marlinAddr      string
 	connectionType  string
+	canProduce      bool
+	canConsume      bool
 	marlinTo        chan marlinTypes.MarlinMessage
 	marlinFrom      chan marlinTypes.MarlinMessage
 	signalConnError chan struct{}
@@ -41,12 +43,30 @@ type MarlinHandler struct {
 func createMarlinHandler(marlinAddr string,
 	marlinTo chan marlinTypes.MarlinMessage,
 	marlinFrom chan marlinTypes.MarlinMessage,
-	connectionType string) (MarlinHandler, error) {
+	connectionType string, direction string) (MarlinHandler, error) {
+	var _canProduce, _canConsume bool
+	switch direction {
+	case "both":
+		_canProduce = true
+		_canConsume = true
+	case "producer":
+		_canProduce = true
+		_canConsume = false
+	case "consumer":
+		_canProduce = false
+		_canConsume = true
+	default:
+		log.Warning("Unknown flow direction for the gateway detected: ", direction, " hence using mode BOTH")
+		_canProduce = true
+		_canConsume = true
+	}
 	return MarlinHandler{
 		marlinAddr:      marlinAddr,
 		marlinTo:        marlinTo,
 		marlinFrom:      marlinFrom,
 		connectionType:  connectionType,
+		canProduce:      _canProduce,
+		canConsume:      _canConsume,
 		signalConnError: make(chan struct{}, 1),
 		signalShutSend:  make(chan struct{}, 1),
 		signalShutRecv:  make(chan struct{}, 1),
@@ -83,11 +103,12 @@ func (h *MarlinHandler) connectMarlin() error {
 // from peer side connector.
 func RunDataConnectHandler(marlinAddr string,
 	marlinTo chan marlinTypes.MarlinMessage,
-	marlinFrom chan marlinTypes.MarlinMessage) {
+	marlinFrom chan marlinTypes.MarlinMessage,
+	direction string) {
 	log.Info("Starting Marlin DataConnect Handler")
 
 	for {
-		handler, err := createMarlinHandler(marlinAddr, marlinTo, marlinFrom, "tcp")
+		handler, err := createMarlinHandler(marlinAddr, marlinTo, marlinFrom, "tcp", direction)
 
 		if err != nil {
 			log.Error("Error encountered while creating Marlin Handler: ", err)
@@ -135,6 +156,10 @@ func (h *MarlinHandler) sendRoutineConnection() {
 			log.Info("Marlin <- Connector Routine shutdown")
 			return
 		default:
+		}
+
+		if !h.canProduce {
+			continue
 		}
 
 		if msg.ChainID != currentlyServicing {
@@ -225,6 +250,10 @@ func (h *MarlinHandler) recvRoutineConnection() {
 			return
 		}
 
+		if !h.canConsume {
+			continue
+		}
+
 		tmMessage := wireProtocol.TendermintMessage{}
 		proto.Unmarshal(buffer, &tmMessage)
 		log.Debug("Marlin -> Connector recieved message: ", buffer, " ", tmMessage)
@@ -265,7 +294,7 @@ func RunSpamFilterHandler(marlinUdsFile string,
 	log.Info("Starting Marlin SpamFilter Handler")
 
 	for {
-		handler, err := createMarlinHandler(marlinUdsFile, marlinTo, marlinFrom, "unix")
+		handler, err := createMarlinHandler(marlinUdsFile, marlinTo, marlinFrom, "unix", "both")
 
 		if err != nil {
 			log.Error("Error encountered while creating Marlin Handler: ", err)

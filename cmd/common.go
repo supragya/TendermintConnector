@@ -25,12 +25,12 @@ import (
 
 	// Tendermint Core Chains
 	"github.com/supragya/TendermintConnector/chains"
-	"github.com/supragya/TendermintConnector/chains/irisnet"
 	"github.com/supragya/TendermintConnector/chains/cosmos"
+	"github.com/supragya/TendermintConnector/chains/irisnet"
 )
 
 var peerPort, rpcPort, marlinPort, listenPortPeer int
-var peerIP, marlinIP, keyFile, chain, fileLocation, marlinUdsFile string
+var direction, peerIP, marlinIP, keyFile, chain, fileLocation, marlinUdsFile string
 var isConnectionOutgoing, isGenerate, isMarlinconnectionOutgoing, doRpcSanity bool
 
 func getRPCNodeStatus(rpcAddr string) (map[string]interface{}, error) {

@@ -8,7 +8,7 @@ Tendermint Connector is a bridging application required for Tendermint based blo
 ## Serviced Blockchains
 Currently, the following blockchains are serviced by **TendermintConnector**:
 1. Irisnet Mainnet 0.16.3
-2. Cosmos-3 Mainnet (WIP)
+2. Cosmos-3 Mainnet
 
 ## Building the application
 Ensure that go is installed on the build system - ensure all is good using `go version`. This should return good version string. Proceed to build the application using:
