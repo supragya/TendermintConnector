@@ -27,6 +27,7 @@ import (
 	"github.com/supragya/TendermintConnector/chains"
 	"github.com/supragya/TendermintConnector/chains/cosmos"
 	"github.com/supragya/TendermintConnector/chains/irisnet"
+	"github.com/supragya/TendermintConnector/chains/tm34"
 )
 
 var peerPort, rpcPort, marlinPort, listenPortPeer int
@@ -85,6 +86,9 @@ func findAndRunDataConnectHandler(node chains.NodeType,
 	case cosmos.ServicedTMCore:
 		log.Info("Attaching Cosmos-3 TM Handler to service given TM core")
 		cosmos.RunDataConnect(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
+	case tm34.ServicedTMCore:
+		log.Info("Attaching TM34 TM Handler to service given TM core")
+		tm34.RunDataConnect(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
 	default:
 		log.Error("Cannot find any handler for ", node)
 		return

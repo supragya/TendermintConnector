@@ -15,6 +15,7 @@ var buildTime string = "Mon Dec 21 13:26:38 UTC 2020"
 var supportedChains = []string{
 	"IRISNet Mainnet 0.16.3 v0.1",
 	"Cosmos-3 Mainnet",
+	"Tendermint v0.34.7",
 }
 
 // Marlin TM Encoder/Decoder Protocols
@@ -27,7 +28,7 @@ var RootCmdVersion string = prepareVersionString()
 func prepareVersionString() string {
 	var buffer bytes.Buffer
 	buffer.WriteString(applicationVersion + " build " + buildCommit)
-	buffer.WriteString("\nCompiled on: "+buildTime)
+	buffer.WriteString("\nCompiled on: " + buildTime)
 	for _, v := range supportedChains {
 		buffer.WriteString("\n+ [Tendermint Chain]   " + v)
 

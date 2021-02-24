@@ -4,6 +4,7 @@ go 1.15
 
 require (
 	github.com/antonfisher/nested-logrus-formatter v1.3.0 // indirect
+	github.com/btcsuite/btcd v0.20.1-beta
 	github.com/btcsuite/btcutil v1.0.2
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
@@ -11,6 +12,7 @@ require (
 	github.com/go-logfmt/logfmt v0.5.0
 	github.com/gogo/protobuf v1.3.1
 	github.com/golang/protobuf v1.4.3
+	github.com/gtank/merlin v0.1.1
 	github.com/hashicorp/golang-lru v0.5.1
 	github.com/libp2p/go-buffer-pool v0.0.2
 	github.com/magiconair/properties v1.8.4 // indirect

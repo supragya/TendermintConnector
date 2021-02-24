@@ -28,6 +28,15 @@ release-cosmos:
 						-X github.com/supragya/TendermintConnector/version.buildTime=$(CURRENTTIME) \
 						-linkmode=external" \
 				-o $(BINDIR)/cosmos_gateway
+release-tm34:
+	$(PROTOC) --go_out=. $(PROTOLOC)/*.proto
+	$(GOBUILD) -ldflags="\
+						-X github.com/supragya/TendermintConnector/cmd.compilationChain=tm34 \
+						-X github.com/supragya/TendermintConnector/version.applicationVersion=$(RELEASE) \
+						-X github.com/supragya/TendermintConnector/version.buildCommit=$(BUILDLINE)@$(BUILDCOMMIT) \
+						-X github.com/supragya/TendermintConnector/version.buildTime=$(CURRENTTIME) \
+						-linkmode=external" \
+				-o $(BINDIR)/tm34_gateway
 clean:
 	rm $(PROTOLOC)/*.go
 	rm -rf $(BINDIR)/*
