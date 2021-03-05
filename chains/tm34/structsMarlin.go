@@ -9,11 +9,11 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/supragya/TendermintConnector/chains/tm34/conn"
 	"github.com/supragya/TendermintConnector/chains/tm34/crypto/ed25519"
+	flow "github.com/supragya/TendermintConnector/chains/tm34/libs/flowrate"
 	"github.com/supragya/TendermintConnector/chains/tm34/libs/timer"
 	tmp2p "github.com/supragya/TendermintConnector/chains/tm34/proto/tendermint/p2p"
 	marlinTypes "github.com/supragya/TendermintConnector/types"
-	"github.com/tendermint/go-amino"
-	flow "github.com/tendermint/tendermint/libs/flowrate"
+	// "github.com/tendermint/go-amino"
 )
 
 type TendermintHandler struct {
@@ -23,7 +23,6 @@ type TendermintHandler struct {
 	peerAddr             string
 	rpcAddr              string
 	privateKey           ed25519.PrivKey
-	codec                *amino.Codec
 	baseConnection       net.Conn
 	validatorCache       *lru.TwoQueueCache
 	maxValidHeight       int64

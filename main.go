@@ -28,5 +28,6 @@ func main() {
 		TimestampFormat: "2006-01-02 15:04:05",
 		FullTimestamp:   true,
 	})
+	// log.SetLevel(log.DebugLevel)
 	cmd.Execute()
 }

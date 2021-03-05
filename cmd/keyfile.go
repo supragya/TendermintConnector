@@ -18,11 +18,8 @@ package cmd
 import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-
 	// Tendermint Core Chains
 	// "github.com/supragya/TendermintConnector/chains"
-	"github.com/supragya/TendermintConnector/chains/irisnet"
-	"github.com/supragya/TendermintConnector/chains/cosmos"
 )
 
 // connectCmd represents the connect command
@@ -32,18 +29,18 @@ var keyFileCmd = &cobra.Command{
 	Long:  `Generate a keyfile for specific blockchain`,
 	Run: func(cmd *cobra.Command, args []string) {
 		switch chain {
-		case irisnet.ServicedKeyFile:
-			if isGenerate {
-				irisnet.GenerateKeyFile(fileLocation)
-			} else {
-				irisnet.VerifyKeyFile(fileLocation)
-			}
-		case cosmos.ServicedKeyFile:
-			if isGenerate {
-				cosmos.GenerateKeyFile(fileLocation)
-			} else {
-				cosmos.VerifyKeyFile(fileLocation)
-			}
+		// case irisnet.ServicedKeyFile:
+		// 	if isGenerate {
+		// 		irisnet.GenerateKeyFile(fileLocation)
+		// 	} else {
+		// 		irisnet.VerifyKeyFile(fileLocation)
+		// 	}
+		// case cosmos.ServicedKeyFile:
+		// 	if isGenerate {
+		// 		cosmos.GenerateKeyFile(fileLocation)
+		// 	} else {
+		// 		cosmos.VerifyKeyFile(fileLocation)
+		// 	}
 		default:
 			log.Error("Unknown tendermint chain, can't generate or verify for ", chain)
 		}

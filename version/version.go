@@ -13,8 +13,6 @@ var buildTime string = "Mon Dec 21 13:26:38 UTC 2020"
 
 // Supported Chains
 var supportedChains = []string{
-	"IRISNet Mainnet 0.16.3 v0.1",
-	"Cosmos-3 Mainnet",
 	"Tendermint v0.34.7",
 }
 
