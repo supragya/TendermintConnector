@@ -19,4 +19,5 @@ var ServicedChains = map[string]uint32{
 	"irisnet-0.16.3-mainnet": 1,
 	"cosmos-3-mainnet":       2,
 	"tm34":                   3,
+	"irisnet-1.0-mainnet":    4,
 }

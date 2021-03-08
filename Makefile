@@ -35,7 +35,7 @@ proto-gen-tm34:
 .PHONY: proto-gen
 
 tm34:
-	$(PROTOC) --go_out=. $(PROTOLOC)/*.proto
+	# $(PROTOC) --go_out=. $(PROTOLOC)/*.proto
 	$(GOBUILD) -ldflags="\
 						-X github.com/supragya/TendermintConnector/cmd.compilationChain=tm34 \
 						-X github.com/supragya/TendermintConnector/version.applicationVersion=$(RELEASE) \
@@ -43,6 +43,15 @@ tm34:
 						-X github.com/supragya/TendermintConnector/version.buildTime=$(CURRENTTIME) \
 						-linkmode=external" \
 				-o $(BINDIR)/tm34_gateway
+iris:
+	# $(PROTOC) --go_out=. $(PROTOLOC)/*.proto
+	$(GOBUILD) -ldflags="\
+						-X github.com/supragya/TendermintConnector/cmd.compilationChain=iris \
+						-X github.com/supragya/TendermintConnector/version.applicationVersion=$(RELEASE) \
+						-X github.com/supragya/TendermintConnector/version.buildCommit=$(BUILDLINE)@$(BUILDCOMMIT) \
+						-X github.com/supragya/TendermintConnector/version.buildTime=$(CURRENTTIME) \
+						-linkmode=external" \
+				-o $(BINDIR)/iris_gateway
 clean:
 	rm $(PROTOLOC)/*.go
 	rm -rf $(BINDIR)/*
