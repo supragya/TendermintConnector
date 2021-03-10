@@ -5,12 +5,16 @@ import (
 	// "bytes"
 
 	"bufio"
+	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
@@ -61,10 +65,9 @@ func RunDataConnect(peerAddr string,
 
 		if isConnectionOutgoing {
 			err = handler.dialPeer()
+		} else {
+			err = handler.acceptPeer()
 		}
-		// else {
-		// 	err = handler.acceptPeer()
-		// }
 		if err != nil {
 			log.Error("Base Connection establishment with peer unsuccessful: ", err)
 			goto REATTEMPT_CONNECTION
@@ -95,8 +98,34 @@ func RunDataConnect(peerAddr string,
 }
 
 func (h *TendermintHandler) dialPeer() error {
-	var err error
-	h.baseConnection, err = net.DialTimeout("tcp", h.peerAddr, 2000*time.Millisecond)
+
+	listener, err := net.Listen("tcp", "0.0.0.0:"+strconv.Itoa(h.listenPort))
+	if err != nil {
+		return err
+	}
+
+	log.Info("TMCore side listening for dials to ",
+		string(hex.EncodeToString(h.privateKey.PubKey().Address())), "@<SYSTEM-IP-ADDR>:", h.listenPort)
+
+	h.baseConnection, err = listener.Accept()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (h *TendermintHandler) acceptPeer() error {
+
+	listener, err := net.Listen("tcp", "0.0.0.0:"+strconv.Itoa(h.listenPort))
+	if err != nil {
+		return err
+	}
+
+	log.Info("TMCore side listening for dials to ",
+		string(hex.EncodeToString(h.privateKey.PubKey().Address())), "@<SYSTEM-IP-ADDR>:", h.listenPort)
+
+	h.baseConnection, err = listener.Accept()
 	if err != nil {
 		return err
 	}
@@ -533,6 +562,73 @@ var keyFileLocation string
 
 var privateKey ed25519.PrivKey
 
+func AsSha256(o interface{}) string {
+	h := sha256.New()
+	h.Write([]byte(fmt.Sprintf("%v", o)))
+
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+func GenerateKeyFile(fileLocation string) {
+	log.Info("Generating KeyPair for irisnet-1.0-mainnet")
+
+	privateKey := ed25519.GenPrivKey()
+	publicKey := privateKey.PubKey()
+
+	key := keyData{
+		Chain:      "irisnet-1.0-mainnet",
+		IdString:   string(hex.EncodeToString(publicKey.Address())),
+		PrivateKey: privateKey.Bytes(),
+		PublicKey:  publicKey.Bytes(),
+		Integrity:  "",
+	}
+
+	key.Integrity = AsSha256(key)
+
+	log.Info("ID for node after generating KeyPair: ", key.IdString)
+
+	encodedJson, err := json.MarshalIndent(&key, "", "    ")
+	if err != nil {
+		log.Error("Error generating KeyFile: ", err)
+	}
+	err = ioutil.WriteFile(fileLocation, encodedJson, 0644)
+	if err != nil {
+		log.Error("Error generating KeyFile: ", err)
+	}
+
+	log.Info("Successfully written keyfile ", fileLocation)
+}
+
+func VerifyKeyFile(fileLocation string) (bool, error) {
+	log.Info("Accessing disk to extract info from KeyFile: ", fileLocation)
+	jsonFile, err := os.Open(fileLocation)
+	// if we os.Open returns an error then handle it
+	if err != nil {
+		log.Error("Error accessing file KeyFile: ", fileLocation, " error: ", err, ". exiting application.")
+		os.Exit(1)
+	}
+	defer jsonFile.Close()
+
+	byteValue, err := ioutil.ReadAll(jsonFile)
+	if err != nil {
+		log.Error("Error decoding KeyFile: ", fileLocation, " error: ", err, ". exiting application.")
+		os.Exit(1)
+	}
+	var key keyData
+	json.Unmarshal(byteValue, &key)
+
+	integrity := key.Integrity
+	key.Integrity = ""
+
+	if key.Chain == "irisnet-1.0-mainnet" && integrity == AsSha256(key) {
+		log.Info("Integrity for KeyFile: ", fileLocation, " checked. Integrity OK.")
+		return true, nil
+	} else {
+		log.Error("Integrity for KeyFile: ", fileLocation, " checked. Integrity NOT OK.")
+		return false, nil
+	}
+}
+
 // ---------------------- COMMON UTILITIES ---------------------------------
 
 func createTMHandler(peerAddr string,
@@ -580,40 +676,39 @@ func createTMHandler(peerAddr string,
 }
 
 func getPrivateKey() ed25519.PrivKey {
-	// if !isKeyFileUsed {
-	return ed25519.GenPrivKey()
-	// }
-	// else {
-	// 	if !memoized {
-	// 		valid, err := VerifyKeyFile(keyFileLocation)
-	// 		if err != nil {
-	// 			log.Error("Error verifying keyfile integrity: ", keyFileLocation)
-	// 			os.Exit(1)
-	// 		} else if !valid {
-	// 			os.Exit(1)
-	// 		}
-	// 		log.Info("Accessing disk to extract info from KeyFile: ", keyFileLocation)
-	// 		jsonFile, err := os.Open(keyFileLocation)
-	// 		// if we os.Open returns an error then handle it
-	// 		if err != nil {
-	// 			log.Error("Error accessing file KeyFile: ", keyFileLocation, " error: ", err, ". exiting application.")
-	// 			os.Exit(1)
-	// 		}
-	// 		defer jsonFile.Close()
+	if !isKeyFileUsed {
+		return ed25519.GenPrivKey()
+	} else {
+		if !memoized {
+			valid, err := VerifyKeyFile(keyFileLocation)
+			if err != nil {
+				log.Error("Error verifying keyfile integrity: ", keyFileLocation)
+				os.Exit(1)
+			} else if !valid {
+				os.Exit(1)
+			}
+			log.Info("Accessing disk to extract info from KeyFile: ", keyFileLocation)
+			jsonFile, err := os.Open(keyFileLocation)
+			// if we os.Open returns an error then handle it
+			if err != nil {
+				log.Error("Error accessing file KeyFile: ", keyFileLocation, " error: ", err, ". exiting application.")
+				os.Exit(1)
+			}
+			defer jsonFile.Close()
 
-	// 		byteValue, err := ioutil.ReadAll(jsonFile)
-	// 		if err != nil {
-	// 			log.Error("Error decoding KeyFile: ", keyFileLocation, " error: ", err, ". exiting application.")
-	// 			os.Exit(1)
-	// 		}
-	// 		var key keyData
-	// 		json.Unmarshal(byteValue, &key)
-	// 		log.Info("Connector assumes for all connections henceforth the ID: ", key.IdString)
-	// 		privateKey = key.PrivateKey
-	// 		memoized = true
-	// 	}
-	// 	return privateKey
-	// }
+			byteValue, err := ioutil.ReadAll(jsonFile)
+			if err != nil {
+				log.Error("Error decoding KeyFile: ", keyFileLocation, " error: ", err, ". exiting application.")
+				os.Exit(1)
+			}
+			var key keyData
+			json.Unmarshal(byteValue, &key)
+			log.Info("Connector assumes for all connections henceforth the ID: ", key.IdString)
+			privateKey = key.PrivateKey
+			memoized = true
+		}
+		return privateKey
+	}
 }
 
 func (t *throughPutData) putInfo(direction string, key string, count uint32) {

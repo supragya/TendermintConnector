@@ -16,6 +16,14 @@ import (
 	// "github.com/tendermint/go-amino"
 )
 
+type keyData struct {
+	Chain      string
+	IdString   string
+	PrivateKey []byte
+	PublicKey  []byte
+	Integrity  string
+}
+
 type TendermintHandler struct {
 	servicedChainId      uint32
 	listenPort           int
