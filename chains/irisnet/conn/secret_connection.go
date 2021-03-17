@@ -255,7 +255,9 @@ func (sc *SecretConnection) SetReadDeadline(t time.Time) error {
 func (sc *SecretConnection) SetWriteDeadline(t time.Time) error {
 	return sc.conn.(net.Conn).SetWriteDeadline(t)
 }
-
+// genEphKeys generates the Ephemeral key- pair. 
+// A cryptographic key is called Ephemeral if it is generated
+// for each execution of a key establishment process.
 func genEphKeys() (ephPub, ephPriv *[32]byte) {
 	var err error
 	ephPub, ephPriv, err = box.GenerateKey(crand.Reader)
@@ -264,7 +266,7 @@ func genEphKeys() (ephPub, ephPriv *[32]byte) {
 	}
 	return
 }
-
+// shareEphPubKey shares the generated Ephemeral key-pair 
 func shareEphPubKey(conn io.ReadWriteCloser, locEphPub *[32]byte) (remEphPub *[32]byte, err error) {
 
 	// Send our pubkey and receive theirs in tandem.
@@ -335,6 +337,8 @@ var blacklist = [][32]byte{
 		0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f},
 }
 
+// hasSmallOrder is used to check the if the Empherial key
+// generated has small order or not
 func hasSmallOrder(pubKey [32]byte) bool {
 	isSmallOrderPoint := false
 	for _, bl := range blacklist {
@@ -346,6 +350,9 @@ func hasSmallOrder(pubKey [32]byte) bool {
 	return isSmallOrderPoint
 }
 
+// Creates hash function according to challenge, generally the 
+// hash function created is encrypted with 256 bytes and here the
+// last 32 bytes has been encrypted for the challenge
 func deriveSecretAndChallenge(dhSecret *[32]byte, locIsLeast bool) (recvSecret, sendSecret *[aeadKeySize]byte, challenge *[32]byte) {
 	hash := sha256.New
 	hkdf := hkdf.New(hash, dhSecret[:], nil, []byte("TENDERMINT_SECRET_CONNECTION_KEY_AND_CHALLENGE_GEN"))
@@ -418,6 +425,8 @@ type authSigMessage struct {
 	Sig []byte
 }
 
+// Used in MakeSecretConnection and used to share the 
+// Authentic Share
 func shareAuthSignature(sc *SecretConnection, pubKey crypto.PubKey, signature []byte) (recvMsg authSigMessage, err error) {
 
 	// Send our info and receive theirs in tandem.

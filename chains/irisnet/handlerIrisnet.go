@@ -38,6 +38,11 @@ var ServicedTMCore chains.NodeType = chains.NodeType{Version: "0.32.2", Network:
 
 // ---------------------- DATA CONNECT INTERFACE --------------------------------
 
+
+// RunDataConnect checks for errors while making connection with the base.
+// This Error may include base connection establishment, creating TM Handler,
+// handhsaking, upgrading connection of handshaking. It will also reattempt
+// the connection.
 func RunDataConnect(peerAddr string,
 	marlinTo chan marlinTypes.MarlinMessage,
 	marlinFrom chan marlinTypes.MarlinMessage,
@@ -93,6 +98,9 @@ func RunDataConnect(peerAddr string,
 	}
 }
 
+// dialPeer will check if the Peer has dialed succesfully or not,
+// if there are errors found while dialling the connection then it
+// will return an error to RunDataConnect, otherwise return "nil"
 func (h *TendermintHandler) dialPeer() error {
 	var err error
 	h.baseConnection, err = net.DialTimeout("tcp", h.peerAddr, 2000*time.Millisecond)
@@ -103,6 +111,9 @@ func (h *TendermintHandler) dialPeer() error {
 	return nil
 }
 
+// acceptPeer will check the if the Peer has connected succesfully 
+// or not, if there are errors found while making an successful connection
+// then it will return an error to RunDataConnect, otherwise return "nil"
 func (h *TendermintHandler) acceptPeer() error {
 	log.Info("TMCore side listening for dials to ",
 		string(hex.EncodeToString(h.privateKey.PubKey().Address())), "@<SYSTEM-IP-ADDR>:", h.listenPort)
@@ -120,6 +131,10 @@ func (h *TendermintHandler) acceptPeer() error {
 	return nil
 }
 
+// upgradeConnectionAndHandshake establishes if there has been a secret
+// connecton established or if there is a problem with handshaking.
+// if no error has been captured, it will give a successful connection 
+// with Address and node info 
 func (h *TendermintHandler) upgradeConnectionAndHandshake() error {
 	var err error
 	h.secretConnection, err = conn.MakeSecretConnection(h.baseConnection, h.privateKey)
@@ -138,6 +153,12 @@ func (h *TendermintHandler) upgradeConnectionAndHandshake() error {
 	return nil
 }
 
+// handshake function follows the protocol set on amino spec,
+// During the handshake the server client will exchange 
+// information required to establish the secure connection.
+// Error encounterd while seniding handhshaking message or reciving 
+// using Amino spec will be checked here and 
+// returned to upgradeConnectionAndHandshake
 func (h *TendermintHandler) handshake() error {
 	var (
 		errc                        = make(chan error, 2)
@@ -183,6 +204,8 @@ func (h *TendermintHandler) handshake() error {
 	return nil
 }
 
+// establishes a P2P connection with the TM Core
+// sends and recives routines accordingly
 func (h *TendermintHandler) beginServicing() error {
 	// Register Messages
 	RegisterPacket(h.codec)
@@ -215,6 +238,12 @@ func (h *TendermintHandler) beginServicing() error {
 	return nil
 }
 
+// Datas are recived by TM Core. sendRoutine sends PING
+// and PONG message to TM Core. Basically, it will
+// Sends PING messages to TM Core or Sends PONG messages
+// to TM Core or Check if PONG messages are received
+// in time or Block to Shut down sendRoutine or
+// messages are recived from the marlin relay.
 func (h *TendermintHandler) sendRoutine() {
 	log.Info("TMCore <- Connector Routine Started")
 
@@ -394,6 +423,9 @@ func (h *TendermintHandler) sendRoutine() {
 	}
 }
 
+// Data is  processed and sent back
+// Received PING and PONG messages from TM Core
+// and Actual message packets are encoded from TM Core 
 func (h *TendermintHandler) recvRoutine() {
 	log.Info("TMCore -> Connector Routine Started")
 
@@ -619,6 +651,7 @@ FOR_LOOP:
 	}
 }
 
+//decodes the Consensus Messages From the Channel Buffer
 func (h *TendermintHandler) decodeConsensusMsgFromChannelBuffer(chanbuf []marlinTypes.PacketMsg) (ConsensusMessage, error) {
 	var databuf []byte
 	var msg ConsensusMessage
@@ -633,6 +666,8 @@ func (h *TendermintHandler) decodeConsensusMsgFromChannelBuffer(chanbuf []marlin
 	return msg, err
 }
 
+// Stop the PONG time when the PING is called upon in
+// recvRoutine
 func (c *P2PConnection) stopPongTimer() {
 	if c.pongTimer != nil {
 		_ = c.pongTimer.Stop()
@@ -643,6 +678,7 @@ func (c *P2PConnection) stopPongTimer() {
 // ---------------------- SPAM FILTER INTERFACE --------------------------------
 
 // RunSpamFilter serves as the entry point for a TM Core handler when serving as a spamfilter
+// Number of goroutines spawned will  be "2* core count".
 func RunSpamFilter(rpcAddr string,
 	marlinTo chan marlinTypes.MarlinMessage,
 	marlinFrom chan marlinTypes.MarlinMessage) {
@@ -670,6 +706,10 @@ func RunSpamFilter(rpcAddr string,
 	handler.throughput.presentThroughput(5, handler.signalShutThroughput)
 }
 
+// Spam Filter executions begins from beginServicingSpamFilter
+// this function will check for all possible spam  at ingress point of Marlin Relay.
+// Spam can also be produced from Marlin Relay. So beginServicingSpamFilter
+// will also check for that.
 func (h *TendermintHandler) beginServicingSpamFilter(id int) {
 	log.Info("Running TM side spam filter handler ", id)
 	// Register Messages
@@ -764,6 +804,8 @@ func (h *TendermintHandler) beginServicingSpamFilter(id int) {
 	}
 }
 
+// 
+//
 func (h *TendermintHandler) thoroughMessageCheck(msg ConsensusMessage) bool {
 	switch msg.(type) {
 	case *VoteMessage:
@@ -791,6 +833,7 @@ func (h *TendermintHandler) thoroughMessageCheck(msg ConsensusMessage) bool {
 	}
 }
 
+// 	
 func (vote *Vote) SignBytes(chainID string, cdc *amino.Codec) []byte {
 	bz, err := cdc.MarshalBinaryLengthPrefixed(CanonicalizeVote(chainID, vote))
 	if err != nil {
@@ -799,6 +842,8 @@ func (vote *Vote) SignBytes(chainID string, cdc *amino.Codec) []byte {
 	return bz
 }
 
+// Get the height of block chain
+//
 func (h *TendermintHandler) getValidators(height int64) ([]Validator, bool) {
 	if height+10 < h.maxValidHeight {
 		// Don't service messages too old
@@ -853,6 +898,11 @@ func (h *TendermintHandler) getValidators(height int64) ([]Validator, bool) {
 	}
 }
 
+// spamVerdictMessage used in beginServicingSpamFilter. This function
+// return the Boolean value in beginServicingSpamFilter, according to
+// boolean value. flow of this function gets executed. If the messages
+// are recived in the form of 0x01 channel, it will allow the request
+// to be proccessed, otherwise it will deny it 	 	
 func (h *TendermintHandler) spamVerdictMessage(msg marlinTypes.MarlinMessage, allow bool) marlinTypes.MarlinMessage {
 	if allow {
 		return marlinTypes.MarlinMessage{
@@ -876,6 +926,8 @@ var isKeyFileUsed, memoized bool
 var keyFileLocation string
 var privateKey ed25519.PrivKeyEd25519
 
+// Generates privatekey and publickey
+// ED25519 Keypair is generated
 func GenerateKeyFile(fileLocation string) {
 	log.Info("Generating KeyPair for irisnet-0.16.3-mainnet")
 
@@ -905,6 +957,7 @@ func GenerateKeyFile(fileLocation string) {
 	log.Info("Successfully written keyfile ", fileLocation)
 }
 
+// VerifyKeyFile  verify's the 'key' file-location
 func VerifyKeyFile(fileLocation string) (bool, error) {
 	log.Info("Accessing disk to extract info from KeyFile: ", fileLocation)
 	jsonFile, err := os.Open(fileLocation)
@@ -933,6 +986,8 @@ func VerifyKeyFile(fileLocation string) (bool, error) {
 	}
 }
 
+// This functions gets the private key from the keyfile!
+// Also verifies the Keyfile integrity
 func getPrivateKey() ed25519.PrivKeyEd25519 {
 	if !isKeyFileUsed {
 		return ed25519.GenPrivKey()
@@ -971,7 +1026,7 @@ func getPrivateKey() ed25519.PrivKeyEd25519 {
 
 // ---------------------- COMMON UTILITIES ---------------------------------
 
-
+//Creates  Handler object between Marlin Relay and TM Core
 func createTMHandler(peerAddr string,
 	rpcAddr string,
 	marlinTo chan marlinTypes.MarlinMessage,
@@ -1016,6 +1071,7 @@ func createTMHandler(peerAddr string,
 	}, nil
 }
 
+//putInfo function into "to",  "from", "spam"
 func (t *throughPutData) putInfo(direction string, key string, count uint32) {
 	t.mu.Lock()
 	switch direction {
@@ -1028,7 +1084,7 @@ func (t *throughPutData) putInfo(direction string, key string, count uint32) {
 	}
 	t.mu.Unlock()
 }
-
+// This function display the logs/stats of SpamFilter
 func (t *throughPutData) presentThroughput(sec time.Duration, shutdownCh chan struct{}) {
 	for {
 		time.Sleep(sec * time.Second)
