@@ -28,6 +28,7 @@ import (
 	// Tendermint Core Chains
 	"github.com/supragya/TendermintConnector/chains"
 	"github.com/supragya/TendermintConnector/chains/iris"
+	"github.com/supragya/TendermintConnector/chains/cosmos"
 	// "github.com/supragya/TendermintConnector/chains/tm34"
 )
 
@@ -75,6 +76,8 @@ var dataconnectCmd = &cobra.Command{
 			// 	findAndRunDataConnectHandler(tm34.ServicedTMCore, peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
 		} else if compilationChain == "iris" {
 			findAndRunDataConnectHandler(iris.ServicedTMCore, peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
+		} else if compilationChain == "cosmos" {
+			findAndRunDataConnectHandler(cosmos.ServicedTMCore, peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
 		} else {
 			panic("Unknown chain. Exiting")
 		}
@@ -117,5 +120,16 @@ func init() {
 		dataconnectCmd.Flags().IntVarP(&marlinPort, "marlinport", "n", 21901, "Marlin TCP Bridge port")
 		dataconnectCmd.Flags().StringVarP(&direction, "direction", "e", "both", "Direction of connection [both/producer/consumer]")
 		dataconnectCmd.Flags().IntVarP(&listenPortPeer, "listenportpeer", "l", 21900, "Port on which Connector should listen for incoming connections from iris peer")
-	}
+	} else if compilationChain == "cosmos" {
+		dataconnectCmd.Flags().StringVarP(&peerIP, "peerip", "i", "127.0.0.1", "Gaia node IP address")
+		dataconnectCmd.Flags().IntVarP(&peerPort, "peerport", "p", 26656, "Gaia node peer connection port")
+		dataconnectCmd.Flags().IntVarP(&rpcPort, "rpcport", "r", 26657, "Gaia node rpc port")
+		dataconnectCmd.Flags().BoolVarP(&doRpcSanity, "rpcsanity", "s", false, "Validate node information prior to connecting to TMCore. (RPC Sanity)")
+		dataconnectCmd.Flags().StringVarP(&keyFile, "keyfile", "k", "", "KeyFile to use for connection")
+		dataconnectCmd.Flags().BoolVarP(&isConnectionOutgoing, "dial", "d", false, "Connector DIALs TMCore (gaia node) if flag is set, otherwise connector LISTENs for connections.")
+		dataconnectCmd.Flags().StringVarP(&marlinIP, "marlinip", "m", "127.0.0.1", "Marlin TCP Bridge IP address")
+		dataconnectCmd.Flags().IntVarP(&marlinPort, "marlinport", "n", 22401, "Marlin TCP Bridge port")
+		dataconnectCmd.Flags().StringVarP(&direction, "direction", "e", "both", "Direction of connection [both/producer/consumer]")
+		dataconnectCmd.Flags().IntVarP(&listenPortPeer, "listenportpeer", "l", 22400, "Port on which Connector should listen for incoming connections from cosmos peer")
+	} 
 }

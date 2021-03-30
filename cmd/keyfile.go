@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 
 	// Tendermint Core Chains
+	"github.com/supragya/TendermintConnector/chains/cosmos"
 	"github.com/supragya/TendermintConnector/chains/iris"
 )
 
@@ -36,12 +37,12 @@ var keyFileCmd = &cobra.Command{
 			} else {
 				iris.VerifyKeyFile(fileLocation)
 			}
-		// case cosmos.ServicedKeyFile:
-		// 	if isGenerate {
-		// 		cosmos.GenerateKeyFile(fileLocation)
-		// 	} else {
-		// 		cosmos.VerifyKeyFile(fileLocation)
-		// 	}
+		case cosmos.ServicedKeyFile:
+			if isGenerate {
+				cosmos.GenerateKeyFile(fileLocation)
+			} else {
+				cosmos.VerifyKeyFile(fileLocation)
+			}
 		default:
 			log.Error("Unknown tendermint chain, can't generate or verify for ", chain)
 		}

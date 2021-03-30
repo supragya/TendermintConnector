@@ -25,6 +25,7 @@ import (
 
 	// Tendermint Core Chains
 	"github.com/supragya/TendermintConnector/chains"
+	"github.com/supragya/TendermintConnector/chains/cosmos"
 	"github.com/supragya/TendermintConnector/chains/iris"
 )
 
@@ -81,9 +82,9 @@ func findAndRunDataConnectHandler(node chains.NodeType,
 	case iris.ServicedTMCore:
 		log.Info("Attaching Irisnet TM Handler to service given TM core")
 		iris.RunDataConnect(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
-	// case cosmos.ServicedTMCore:
-	// 	log.Info("Attaching Cosmos-3 TM Handler to service given TM core")
-	// 	cosmos.RunDataConnect(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
+	case cosmos.ServicedTMCore:
+		log.Info("Attaching Cosmos-4 TM Handler to service given TM core")
+		cosmos.RunDataConnect(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
 	// case tm34.ServicedTMCore:
 	// 	log.Info("Attaching TM34 TM Handler to service given TM core")
 	// 	tm34.RunDataConnect(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
