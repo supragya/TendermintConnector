@@ -113,11 +113,9 @@ func (*PublicKey) XXX_OneofWrappers() []interface{} {
 }
 
 func init() {
-	// --------------------- REMOVED SINCE REGISTERED IN IRIS ---------------------------
-	// proto.RegisterType((*PublicKey)(nil), "tendermint.crypto.PublicKey")
 }
 
-func init() { proto.RegisterFile("tendermint/crypto/keys.proto", fileDescriptor_cb048658b234868c) }
+func init() {}
 
 var fileDescriptor_cb048658b234868c = []byte{
 	// 229 bytes of a gzipped FileDescriptorProto

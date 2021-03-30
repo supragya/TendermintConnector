@@ -570,13 +570,13 @@ func AsSha256(o interface{}) string {
 }
 
 func GenerateKeyFile(fileLocation string) {
-	log.Info("Generating KeyPair for cosmosnet-1.0-mainnet")
+	log.Info("Generating KeyPair for cosmoshub-4-mainnet")
 
 	privateKey := ed25519.GenPrivKey()
 	publicKey := privateKey.PubKey()
 
 	key := keyData{
-		Chain:      "cosmosnet-1.0-mainnet",
+		Chain:      "cosmoshub-4-mainnet",
 		IdString:   string(hex.EncodeToString(publicKey.Address())),
 		PrivateKey: privateKey.Bytes(),
 		PublicKey:  publicKey.Bytes(),
@@ -620,7 +620,7 @@ func VerifyKeyFile(fileLocation string) (bool, error) {
 	integrity := key.Integrity
 	key.Integrity = ""
 
-	if key.Chain == "cosmosnet-1.0-mainnet" && integrity == AsSha256(key) {
+	if key.Chain == "cosmoshub-4-mainnet" && integrity == AsSha256(key) {
 		log.Info("Integrity for KeyFile: ", fileLocation, " checked. Integrity OK.")
 		return true, nil
 	} else {

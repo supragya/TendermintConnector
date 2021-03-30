@@ -786,19 +786,10 @@ func (*Message) XXX_OneofWrappers() []interface{} {
 }
 
 func init() {
-	proto.RegisterType((*NewRoundStep)(nil), "tendermint.consensus.NewRoundStep")
-	proto.RegisterType((*NewValidBlock)(nil), "tendermint.consensus.NewValidBlock")
-	proto.RegisterType((*Proposal)(nil), "tendermint.consensus.Proposal")
-	proto.RegisterType((*ProposalPOL)(nil), "tendermint.consensus.ProposalPOL")
-	proto.RegisterType((*BlockPart)(nil), "tendermint.consensus.BlockPart")
-	proto.RegisterType((*Vote)(nil), "tendermint.consensus.Vote")
-	proto.RegisterType((*HasVote)(nil), "tendermint.consensus.HasVote")
-	proto.RegisterType((*VoteSetMaj23)(nil), "tendermint.consensus.VoteSetMaj23")
-	proto.RegisterType((*VoteSetBits)(nil), "tendermint.consensus.VoteSetBits")
-	proto.RegisterType((*Message)(nil), "tendermint.consensus.Message")
+
 }
 
-func init() { proto.RegisterFile("tendermint/consensus/types.proto", fileDescriptor_81a22d2efc008981) }
+func init() {}
 
 var fileDescriptor_81a22d2efc008981 = []byte{
 	// 875 bytes of a gzipped FileDescriptorProto

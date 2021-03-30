@@ -309,13 +309,10 @@ func (m *CanonicalVote) GetChainID() string {
 }
 
 func init() {
-	proto.RegisterType((*CanonicalBlockID)(nil), "tendermint.types.CanonicalBlockID")
-	proto.RegisterType((*CanonicalPartSetHeader)(nil), "tendermint.types.CanonicalPartSetHeader")
-	proto.RegisterType((*CanonicalProposal)(nil), "tendermint.types.CanonicalProposal")
-	proto.RegisterType((*CanonicalVote)(nil), "tendermint.types.CanonicalVote")
+
 }
 
-func init() { proto.RegisterFile("tendermint/types/canonical.proto", fileDescriptor_8d1a1a84ff7267ed) }
+func init() {}
 
 var fileDescriptor_8d1a1a84ff7267ed = []byte{
 	// 507 bytes of a gzipped FileDescriptorProto

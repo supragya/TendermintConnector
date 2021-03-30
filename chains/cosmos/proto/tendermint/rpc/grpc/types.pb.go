@@ -196,13 +196,10 @@ func (m *ResponseBroadcastTx) GetDeliverTx() *types.ResponseDeliverTx {
 }
 
 func init() {
-	proto.RegisterType((*RequestPing)(nil), "tendermint.rpc.grpc.RequestPing")
-	proto.RegisterType((*RequestBroadcastTx)(nil), "tendermint.rpc.grpc.RequestBroadcastTx")
-	proto.RegisterType((*ResponsePing)(nil), "tendermint.rpc.grpc.ResponsePing")
-	proto.RegisterType((*ResponseBroadcastTx)(nil), "tendermint.rpc.grpc.ResponseBroadcastTx")
+
 }
 
-func init() { proto.RegisterFile("tendermint/rpc/grpc/types.proto", fileDescriptor_0ffff5682c662b95) }
+func init() {}
 
 var fileDescriptor_0ffff5682c662b95 = []byte{
 	// 316 bytes of a gzipped FileDescriptorProto

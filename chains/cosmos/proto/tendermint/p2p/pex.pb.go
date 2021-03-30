@@ -189,12 +189,10 @@ func (*Message) XXX_OneofWrappers() []interface{} {
 }
 
 func init() {
-	proto.RegisterType((*PexRequest)(nil), "tendermint.p2p.PexRequest")
-	proto.RegisterType((*PexAddrs)(nil), "tendermint.p2p.PexAddrs")
-	proto.RegisterType((*Message)(nil), "tendermint.p2p.Message")
+
 }
 
-func init() { proto.RegisterFile("tendermint/p2p/pex.proto", fileDescriptor_81c2f011fd13be57) }
+func init() {}
 
 var fileDescriptor_81c2f011fd13be57 = []byte{
 	// 293 bytes of a gzipped FileDescriptorProto

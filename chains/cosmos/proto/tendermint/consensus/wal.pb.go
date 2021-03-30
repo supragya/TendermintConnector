@@ -362,14 +362,10 @@ func (m *TimedWALMessage) GetMsg() *WALMessage {
 }
 
 func init() {
-	proto.RegisterType((*MsgInfo)(nil), "tendermint.consensus.MsgInfo")
-	proto.RegisterType((*TimeoutInfo)(nil), "tendermint.consensus.TimeoutInfo")
-	proto.RegisterType((*EndHeight)(nil), "tendermint.consensus.EndHeight")
-	proto.RegisterType((*WALMessage)(nil), "tendermint.consensus.WALMessage")
-	proto.RegisterType((*TimedWALMessage)(nil), "tendermint.consensus.TimedWALMessage")
+
 }
 
-func init() { proto.RegisterFile("tendermint/consensus/wal.proto", fileDescriptor_ed0b60c2d348ab09) }
+func init() {}
 
 var fileDescriptor_ed0b60c2d348ab09 = []byte{
 	// 562 bytes of a gzipped FileDescriptorProto

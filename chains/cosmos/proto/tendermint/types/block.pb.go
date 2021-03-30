@@ -92,10 +92,10 @@ func (m *Block) GetLastCommit() *Commit {
 }
 
 func init() {
-	proto.RegisterType((*Block)(nil), "tendermint.types.Block")
+
 }
 
-func init() { proto.RegisterFile("tendermint/types/block.proto", fileDescriptor_70840e82f4357ab1) }
+func init() {}
 
 var fileDescriptor_70840e82f4357ab1 = []byte{
 	// 294 bytes of a gzipped FileDescriptorProto

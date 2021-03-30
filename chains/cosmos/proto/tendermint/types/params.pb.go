@@ -386,15 +386,10 @@ func (m *HashedParams) GetBlockMaxGas() int64 {
 }
 
 func init() {
-	proto.RegisterType((*ConsensusParams)(nil), "tendermint.types.ConsensusParams")
-	proto.RegisterType((*BlockParams)(nil), "tendermint.types.BlockParams")
-	proto.RegisterType((*EvidenceParams)(nil), "tendermint.types.EvidenceParams")
-	proto.RegisterType((*ValidatorParams)(nil), "tendermint.types.ValidatorParams")
-	proto.RegisterType((*VersionParams)(nil), "tendermint.types.VersionParams")
-	proto.RegisterType((*HashedParams)(nil), "tendermint.types.HashedParams")
+
 }
 
-func init() { proto.RegisterFile("tendermint/types/params.proto", fileDescriptor_e12598271a686f57) }
+func init() {}
 
 var fileDescriptor_e12598271a686f57 = []byte{
 	// 560 bytes of a gzipped FileDescriptorProto

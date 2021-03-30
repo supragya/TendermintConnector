@@ -311,13 +311,10 @@ func (m *EvidenceList) GetEvidence() []Evidence {
 }
 
 func init() {
-	proto.RegisterType((*Evidence)(nil), "tendermint.types.Evidence")
-	proto.RegisterType((*DuplicateVoteEvidence)(nil), "tendermint.types.DuplicateVoteEvidence")
-	proto.RegisterType((*LightClientAttackEvidence)(nil), "tendermint.types.LightClientAttackEvidence")
-	proto.RegisterType((*EvidenceList)(nil), "tendermint.types.EvidenceList")
+
 }
 
-func init() { proto.RegisterFile("tendermint/types/evidence.proto", fileDescriptor_6825fabc78e0a168) }
+func init() {}
 
 var fileDescriptor_6825fabc78e0a168 = []byte{
 	// 552 bytes of a gzipped FileDescriptorProto

@@ -382,14 +382,10 @@ func (m *ChunkResponse) GetMissing() bool {
 }
 
 func init() {
-	proto.RegisterType((*Message)(nil), "tendermint.statesync.Message")
-	proto.RegisterType((*SnapshotsRequest)(nil), "tendermint.statesync.SnapshotsRequest")
-	proto.RegisterType((*SnapshotsResponse)(nil), "tendermint.statesync.SnapshotsResponse")
-	proto.RegisterType((*ChunkRequest)(nil), "tendermint.statesync.ChunkRequest")
-	proto.RegisterType((*ChunkResponse)(nil), "tendermint.statesync.ChunkResponse")
+
 }
 
-func init() { proto.RegisterFile("tendermint/statesync/types.proto", fileDescriptor_a1c2869546ca7914) }
+func init() {}
 
 var fileDescriptor_a1c2869546ca7914 = []byte{
 	// 414 bytes of a gzipped FileDescriptorProto

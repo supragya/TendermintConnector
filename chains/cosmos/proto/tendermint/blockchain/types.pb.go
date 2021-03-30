@@ -373,15 +373,10 @@ func (*Message) XXX_OneofWrappers() []interface{} {
 }
 
 func init() {
-	proto.RegisterType((*BlockRequest)(nil), "tendermint.blockchain.BlockRequest")
-	proto.RegisterType((*NoBlockResponse)(nil), "tendermint.blockchain.NoBlockResponse")
-	proto.RegisterType((*BlockResponse)(nil), "tendermint.blockchain.BlockResponse")
-	proto.RegisterType((*StatusRequest)(nil), "tendermint.blockchain.StatusRequest")
-	proto.RegisterType((*StatusResponse)(nil), "tendermint.blockchain.StatusResponse")
-	proto.RegisterType((*Message)(nil), "tendermint.blockchain.Message")
+
 }
 
-func init() { proto.RegisterFile("tendermint/blockchain/types.proto", fileDescriptor_2927480384e78499) }
+func init() {}
 
 var fileDescriptor_2927480384e78499 = []byte{
 	// 392 bytes of a gzipped FileDescriptorProto

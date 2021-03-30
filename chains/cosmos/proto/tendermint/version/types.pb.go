@@ -134,11 +134,10 @@ func (m *Consensus) GetApp() uint64 {
 }
 
 func init() {
-	proto.RegisterType((*App)(nil), "tendermint.version.App")
-	proto.RegisterType((*Consensus)(nil), "tendermint.version.Consensus")
+
 }
 
-func init() { proto.RegisterFile("tendermint/version/types.proto", fileDescriptor_f9b42966edc5edad) }
+func init() {}
 
 var fileDescriptor_f9b42966edc5edad = []byte{
 	// 248 bytes of a gzipped FileDescriptorProto

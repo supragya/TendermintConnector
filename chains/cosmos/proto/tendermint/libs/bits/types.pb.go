@@ -75,10 +75,10 @@ func (m *BitArray) GetElems() []uint64 {
 }
 
 func init() {
-	proto.RegisterType((*BitArray)(nil), "tendermint.libs.bits.BitArray")
+
 }
 
-func init() { proto.RegisterFile("tendermint/libs/bits/types.proto", fileDescriptor_e91ab2672920d7d4) }
+func init() {}
 
 var fileDescriptor_e91ab2672920d7d4 = []byte{
 	// 198 bytes of a gzipped FileDescriptorProto

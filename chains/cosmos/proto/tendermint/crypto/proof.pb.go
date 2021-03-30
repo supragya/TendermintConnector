@@ -314,14 +314,10 @@ func (m *ProofOps) GetOps() []ProofOp {
 }
 
 func init() {
-	proto.RegisterType((*Proof)(nil), "tendermint.crypto.Proof")
-	proto.RegisterType((*ValueOp)(nil), "tendermint.crypto.ValueOp")
-	proto.RegisterType((*DominoOp)(nil), "tendermint.crypto.DominoOp")
-	proto.RegisterType((*ProofOp)(nil), "tendermint.crypto.ProofOp")
-	proto.RegisterType((*ProofOps)(nil), "tendermint.crypto.ProofOps")
+
 }
 
-func init() { proto.RegisterFile("tendermint/crypto/proof.proto", fileDescriptor_6b60b6ba2ab5b856) }
+func init() {}
 
 var fileDescriptor_6b60b6ba2ab5b856 = []byte{
 	// 377 bytes of a gzipped FileDescriptorProto

@@ -139,11 +139,10 @@ func (*Message) XXX_OneofWrappers() []interface{} {
 }
 
 func init() {
-	proto.RegisterType((*Txs)(nil), "tendermint.mempool.Txs")
-	proto.RegisterType((*Message)(nil), "tendermint.mempool.Message")
+
 }
 
-func init() { proto.RegisterFile("tendermint/mempool/types.proto", fileDescriptor_2af51926fdbcbc05) }
+func init() {}
 
 var fileDescriptor_2af51926fdbcbc05 = []byte{
 	// 209 bytes of a gzipped FileDescriptorProto

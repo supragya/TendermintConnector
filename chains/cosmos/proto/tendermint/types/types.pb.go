@@ -1029,24 +1029,10 @@ func (m *TxProof) GetProof() *crypto.Proof {
 }
 
 func init() {
-	proto.RegisterEnum("tendermint.types.BlockIDFlag", BlockIDFlag_name, BlockIDFlag_value)
-	proto.RegisterEnum("tendermint.types.SignedMsgType", SignedMsgType_name, SignedMsgType_value)
-	proto.RegisterType((*PartSetHeader)(nil), "tendermint.types.PartSetHeader")
-	proto.RegisterType((*Part)(nil), "tendermint.types.Part")
-	proto.RegisterType((*BlockID)(nil), "tendermint.types.BlockID")
-	proto.RegisterType((*Header)(nil), "tendermint.types.Header")
-	proto.RegisterType((*Data)(nil), "tendermint.types.Data")
-	proto.RegisterType((*Vote)(nil), "tendermint.types.Vote")
-	proto.RegisterType((*Commit)(nil), "tendermint.types.Commit")
-	proto.RegisterType((*CommitSig)(nil), "tendermint.types.CommitSig")
-	proto.RegisterType((*Proposal)(nil), "tendermint.types.Proposal")
-	proto.RegisterType((*SignedHeader)(nil), "tendermint.types.SignedHeader")
-	proto.RegisterType((*LightBlock)(nil), "tendermint.types.LightBlock")
-	proto.RegisterType((*BlockMeta)(nil), "tendermint.types.BlockMeta")
-	proto.RegisterType((*TxProof)(nil), "tendermint.types.TxProof")
+
 }
 
-func init() { proto.RegisterFile("tendermint/types/types.proto", fileDescriptor_d3a6e55e2345de56) }
+func init() {}
 
 var fileDescriptor_d3a6e55e2345de56 = []byte{
 	// 1334 bytes of a gzipped FileDescriptorProto

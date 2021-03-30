@@ -412,14 +412,10 @@ func (m *State) GetAppHash() []byte {
 }
 
 func init() {
-	proto.RegisterType((*ABCIResponses)(nil), "tendermint.state.ABCIResponses")
-	proto.RegisterType((*ValidatorsInfo)(nil), "tendermint.state.ValidatorsInfo")
-	proto.RegisterType((*ConsensusParamsInfo)(nil), "tendermint.state.ConsensusParamsInfo")
-	proto.RegisterType((*Version)(nil), "tendermint.state.Version")
-	proto.RegisterType((*State)(nil), "tendermint.state.State")
+
 }
 
-func init() { proto.RegisterFile("tendermint/state/types.proto", fileDescriptor_ccfacf933f22bf93) }
+func init() {}
 
 var fileDescriptor_ccfacf933f22bf93 = []byte{
 	// 787 bytes of a gzipped FileDescriptorProto

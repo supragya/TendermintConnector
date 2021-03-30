@@ -307,14 +307,10 @@ func (m *AuthSigMessage) GetSig() []byte {
 }
 
 func init() {
-	proto.RegisterType((*PacketPing)(nil), "tendermint.p2p.PacketPing")
-	proto.RegisterType((*PacketPong)(nil), "tendermint.p2p.PacketPong")
-	proto.RegisterType((*PacketMsg)(nil), "tendermint.p2p.PacketMsg")
-	proto.RegisterType((*Packet)(nil), "tendermint.p2p.Packet")
-	proto.RegisterType((*AuthSigMessage)(nil), "tendermint.p2p.AuthSigMessage")
+
 }
 
-func init() { proto.RegisterFile("tendermint/p2p/conn.proto", fileDescriptor_22474b5527c8fa9f) }
+func init() {}
 
 var fileDescriptor_22474b5527c8fa9f = []byte{
 	// 416 bytes of a gzipped FileDescriptorProto

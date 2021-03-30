@@ -296,13 +296,10 @@ func (m *DefaultNodeInfoOther) GetRPCAddress() string {
 }
 
 func init() {
-	proto.RegisterType((*NetAddress)(nil), "tendermint.p2p.NetAddress")
-	proto.RegisterType((*ProtocolVersion)(nil), "tendermint.p2p.ProtocolVersion")
-	proto.RegisterType((*DefaultNodeInfo)(nil), "tendermint.p2p.DefaultNodeInfo")
-	proto.RegisterType((*DefaultNodeInfoOther)(nil), "tendermint.p2p.DefaultNodeInfoOther")
+
 }
 
-func init() { proto.RegisterFile("tendermint/p2p/types.proto", fileDescriptor_c8a29e659aeca578) }
+func init() {}
 
 var fileDescriptor_c8a29e659aeca578 = []byte{
 	// 503 bytes of a gzipped FileDescriptorProto

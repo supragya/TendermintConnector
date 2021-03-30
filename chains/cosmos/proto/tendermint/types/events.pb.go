@@ -83,10 +83,10 @@ func (m *EventDataRoundState) GetStep() string {
 }
 
 func init() {
-	proto.RegisterType((*EventDataRoundState)(nil), "tendermint.types.EventDataRoundState")
+
 }
 
-func init() { proto.RegisterFile("tendermint/types/events.proto", fileDescriptor_72cfafd446dedf7c) }
+func init() {}
 
 var fileDescriptor_72cfafd446dedf7c = []byte{
 	// 219 bytes of a gzipped FileDescriptorProto

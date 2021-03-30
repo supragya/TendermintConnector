@@ -662,20 +662,10 @@ func (*Message) XXX_OneofWrappers() []interface{} {
 }
 
 func init() {
-	proto.RegisterEnum("tendermint.privval.Errors", Errors_name, Errors_value)
-	proto.RegisterType((*RemoteSignerError)(nil), "tendermint.privval.RemoteSignerError")
-	proto.RegisterType((*PubKeyRequest)(nil), "tendermint.privval.PubKeyRequest")
-	proto.RegisterType((*PubKeyResponse)(nil), "tendermint.privval.PubKeyResponse")
-	proto.RegisterType((*SignVoteRequest)(nil), "tendermint.privval.SignVoteRequest")
-	proto.RegisterType((*SignedVoteResponse)(nil), "tendermint.privval.SignedVoteResponse")
-	proto.RegisterType((*SignProposalRequest)(nil), "tendermint.privval.SignProposalRequest")
-	proto.RegisterType((*SignedProposalResponse)(nil), "tendermint.privval.SignedProposalResponse")
-	proto.RegisterType((*PingRequest)(nil), "tendermint.privval.PingRequest")
-	proto.RegisterType((*PingResponse)(nil), "tendermint.privval.PingResponse")
-	proto.RegisterType((*Message)(nil), "tendermint.privval.Message")
+
 }
 
-func init() { proto.RegisterFile("tendermint/privval/types.proto", fileDescriptor_cb4e437a5328cf9c) }
+func init() {}
 
 var fileDescriptor_cb4e437a5328cf9c = []byte{
 	// 773 bytes of a gzipped FileDescriptorProto

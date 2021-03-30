@@ -205,12 +205,10 @@ func (m *SimpleValidator) GetVotingPower() int64 {
 }
 
 func init() {
-	proto.RegisterType((*ValidatorSet)(nil), "tendermint.types.ValidatorSet")
-	proto.RegisterType((*Validator)(nil), "tendermint.types.Validator")
-	proto.RegisterType((*SimpleValidator)(nil), "tendermint.types.SimpleValidator")
+
 }
 
-func init() { proto.RegisterFile("tendermint/types/validator.proto", fileDescriptor_4e92274df03d3088) }
+func init() {}
 
 var fileDescriptor_4e92274df03d3088 = []byte{
 	// 386 bytes of a gzipped FileDescriptorProto
