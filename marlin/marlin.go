@@ -294,7 +294,7 @@ func RunSpamFilterHandler(marlinUdsFile string,
 	log.Info("Starting Marlin SpamFilter Handler")
 
 	for {
-		handler, err := createMarlinHandler(marlinUdsFile, marlinTo, marlinFrom, "unix", "both")
+		handler, err := createMarlinHandler(marlinUdsFile, marlinTo, marlinFrom, "tcp", "both")
 
 		if err != nil {
 			log.Error("Error encountered while creating Marlin Handler: ", err)

@@ -7,6 +7,7 @@ import (
 	"github.com/supragya/TendermintConnector/chains/iris/crypto/merkle"
 	"github.com/supragya/TendermintConnector/chains/iris/libs/bits"
 	tmjson "github.com/supragya/TendermintConnector/chains/iris/libs/json"
+	"github.com/supragya/TendermintConnector/chains/iris/libs/protoio"
 	tmproto "github.com/supragya/TendermintConnector/chains/iris/proto/tendermint/types"
 )
 
@@ -50,6 +51,18 @@ type PartSetHeader struct {
 	Hash  []byte `json:"hash"`
 }
 
+// ToProto converts PartSetHeader to protobuf
+func (psh *PartSetHeader) ToProto() tmproto.PartSetHeader {
+	if psh == nil {
+		return tmproto.PartSetHeader{}
+	}
+
+	return tmproto.PartSetHeader{
+		Total: psh.Total,
+		Hash:  psh.Hash,
+	}
+}
+
 // NewValidBlockMessage is sent when a validator observes a valid block B in some round r,
 // i.e., there is a Proposal for block B and 2/3+ prevotes for the block B in the round r.
 // In case the block is also committed, then IsCommit flag is set to true.
@@ -65,6 +78,17 @@ type NewValidBlockMessage struct {
 type BlockID struct {
 	Hash          []byte        `json:"hash"`
 	PartSetHeader PartSetHeader `json:"parts"`
+}
+
+func (blockID *BlockID) ToProto() tmproto.BlockID {
+	if blockID == nil {
+		return tmproto.BlockID{}
+	}
+
+	return tmproto.BlockID{
+		Hash:          blockID.Hash,
+		PartSetHeader: blockID.PartSetHeader.ToProto(),
+	}
 }
 
 type Proposal struct {
@@ -122,6 +146,25 @@ type VoteMessage struct {
 	Vote *Vote
 }
 
+// ToProto converts the handwritten type to proto generated type
+// return type, nil if everything converts safely, otherwise nil, error
+func (vote *Vote) ToProto() *tmproto.Vote {
+	if vote == nil {
+		return nil
+	}
+
+	return &tmproto.Vote{
+		Type:             vote.Type,
+		Height:           vote.Height,
+		Round:            vote.Round,
+		BlockID:          vote.BlockID.ToProto(),
+		Timestamp:        vote.Timestamp,
+		ValidatorAddress: vote.ValidatorAddress,
+		ValidatorIndex:   vote.ValidatorIndex,
+		Signature:        vote.Signature,
+	}
+}
+
 //-------------------------------------
 
 // HasVoteMessage is sent to indicate that a particular vote has been received.
@@ -154,3 +197,49 @@ type VoteSetBitsMessage struct {
 }
 
 //-------------------------------------
+
+// CanonicalizeVote transforms the given PartSetHeader to a CanonicalPartSetHeader.
+func CanonicalizePartSetHeader(psh tmproto.PartSetHeader) tmproto.CanonicalPartSetHeader {
+	return tmproto.CanonicalPartSetHeader(psh)
+}
+
+func CanonicalizeBlockID(bid tmproto.BlockID) *tmproto.CanonicalBlockID {
+	rbid, err := BlockIDFromProto(&bid)
+	if err != nil {
+		panic(err)
+	}
+	var cbid *tmproto.CanonicalBlockID
+	if rbid == nil {
+		cbid = nil
+	} else {
+		cbid = &tmproto.CanonicalBlockID{
+			Hash:          bid.Hash,
+			PartSetHeader: CanonicalizePartSetHeader(bid.PartSetHeader),
+		}
+	}
+
+	return cbid
+}
+
+// CanonicalizeVote transforms the given Vote to a CanonicalVote, which does
+// not contain ValidatorIndex and ValidatorAddress fields.
+func CanonicalizeVote(chainID string, vote *tmproto.Vote) tmproto.CanonicalVote {
+	return tmproto.CanonicalVote{
+		Type:      vote.Type,
+		Height:    vote.Height,       // encoded as sfixed64
+		Round:     int64(vote.Round), // encoded as sfixed64
+		BlockID:   CanonicalizeBlockID(vote.BlockID),
+		Timestamp: vote.Timestamp,
+		ChainID:   chainID,
+	}
+}
+
+func VoteSignBytes(chainID string, vote *tmproto.Vote) []byte {
+	pb := CanonicalizeVote(chainID, vote)
+	bz, err := protoio.MarshalDelimited(&pb)
+	if err != nil {
+		panic(err)
+	}
+
+	return bz
+}
