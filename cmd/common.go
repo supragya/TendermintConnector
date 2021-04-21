@@ -101,9 +101,9 @@ func findAndRunSpamFilterHandler(node chains.NodeType,
 	log.Info("Trying to match ", node, " to available TMCore Spamfilter handlers")
 
 	switch node {
-	// case irisnet.ServicedTMCore:
-	// 	log.Info("Attaching Irisnet TM spamfilter")
-	// 	irisnet.RunSpamFilter(rpcAddr, marlinTo, marlinFrom)
+	case iris.ServicedTMCore:
+		log.Info("Attaching Irisnet TM spamfilter")
+		iris.RunSpamFilter(rpcAddr, marlinTo, marlinFrom)
 	// case cosmos.ServicedTMCore:
 	// 	log.Info("Attaching Cosmos-3 TM spamfilter")
 	// 	cosmos.RunSpamFilter(rpcAddr, marlinTo, marlinFrom)

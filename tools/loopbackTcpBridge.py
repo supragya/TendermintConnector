@@ -18,7 +18,7 @@ while True:
 
         # Receive the data in small chunks and retransmit it
         while True:
-            data = connection.recv(100)
+            data = connection.recv(10)
             for i in range(len(data)):
                 print(data[i], end=" ", flush=True)
             # if data:

@@ -101,16 +101,8 @@ func RunDataConnect(peerAddr string,
 }
 
 func (h *TendermintHandler) dialPeer() error {
-
-	listener, err := net.Listen("tcp", "0.0.0.0:"+strconv.Itoa(h.listenPort))
-	if err != nil {
-		return err
-	}
-
-	log.Info("TMCore side listening for dials to ",
-		string(hex.EncodeToString(h.privateKey.PubKey().Address())), "@<SYSTEM-IP-ADDR>:", h.listenPort)
-
-	h.baseConnection, err = listener.Accept()
+	var err error
+	h.baseConnection, err = net.DialTimeout("tcp", h.peerAddr, 2000*time.Millisecond)
 	if err != nil {
 		return err
 	}
