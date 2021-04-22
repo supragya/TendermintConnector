@@ -26,7 +26,7 @@ import (
 	// Tendermint Core Chains
 	"github.com/supragya/TendermintConnector/chains"
 	"github.com/supragya/TendermintConnector/chains/cosmos"
-	"github.com/supragya/TendermintConnector/chains/irisnet"
+	"github.com/supragya/TendermintConnector/chains/iris"
 )
 
 var peerPort, rpcPort, marlinPort, listenPortPeer int
@@ -79,12 +79,15 @@ func findAndRunDataConnectHandler(node chains.NodeType,
 	log.Info("Trying to match ", node, " to available TMCore Data Connect handlers")
 
 	switch node {
-	case irisnet.ServicedTMCore:
+	case iris.ServicedTMCore:
 		log.Info("Attaching Irisnet TM Handler to service given TM core")
-		irisnet.RunDataConnect(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
+		iris.RunDataConnect(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
 	case cosmos.ServicedTMCore:
-		log.Info("Attaching Cosmos-3 TM Handler to service given TM core")
+		log.Info("Attaching Cosmos-4 TM Handler to service given TM core")
 		cosmos.RunDataConnect(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
+	// case tm34.ServicedTMCore:
+	// 	log.Info("Attaching TM34 TM Handler to service given TM core")
+	// 	tm34.RunDataConnect(peerAddr, marlinTo, marlinFrom, isConnectionOutgoing, keyFile, listenPortPeer)
 	default:
 		log.Error("Cannot find any handler for ", node)
 		return
@@ -98,11 +101,11 @@ func findAndRunSpamFilterHandler(node chains.NodeType,
 	log.Info("Trying to match ", node, " to available TMCore Spamfilter handlers")
 
 	switch node {
-	case irisnet.ServicedTMCore:
+	case iris.ServicedTMCore:
 		log.Info("Attaching Irisnet TM spamfilter")
-		irisnet.RunSpamFilter(rpcAddr, marlinTo, marlinFrom)
+		iris.RunSpamFilter(rpcAddr, marlinTo, marlinFrom)
 	case cosmos.ServicedTMCore:
-		log.Info("Attaching Cosmos-3 TM spamfilter")
+		log.Info("Attaching Cosmos TM spamfilter")
 		cosmos.RunSpamFilter(rpcAddr, marlinTo, marlinFrom)
 	default:
 		log.Error("Cannot find any spamfilter for ", node)

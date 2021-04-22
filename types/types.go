@@ -13,9 +13,12 @@ type PacketMsg struct {
 	Bytes     []byte
 }
 
-// DANGER - Do not change mappings for serviced chains.
+// DANGER - Do not change mappings for serviced chains. APPEND ONLY
 // These are vital for encoding / decoding to correct chains.
 var ServicedChains = map[string]uint32{
 	"irisnet-0.16.3-mainnet": 1,
-	"cosmos-3-mainnet": 2,
+	"cosmos-3-mainnet":       2,
+	"tm34":                   3,
+	"irisnet-1.0-mainnet":    4,
+	"cosmoshub-4-mainnet":    5,
 }

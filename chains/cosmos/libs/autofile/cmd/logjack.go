@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	auto "github.com/tendermint/tendermint/libs/autofile"
-	cmn "github.com/tendermint/tendermint/libs/common"
+	auto "github.com/supragya/TendermintConnector/chains/cosmos/libs/autofile"
+	tmos "github.com/supragya/TendermintConnector/chains/cosmos/libs/os"
 )
 
 const Version = "0.0.1"
@@ -23,13 +23,30 @@ func parseFlags() (headPath string, chopSize int64, limitSize int64, version boo
 	flagSet.StringVar(&chopSizeStr, "chop", "100M", "Move file if greater than this")
 	flagSet.StringVar(&limitSizeStr, "limit", "10G", "Only keep this much (for each specified file). Remove old files.")
 	flagSet.BoolVar(&version, "version", false, "Version")
-	flagSet.Parse(os.Args[1:])
+	if err := flagSet.Parse(os.Args[1:]); err != nil {
+		fmt.Printf("err parsing flag: %v\n", err)
+		os.Exit(1)
+	}
 	chopSize = parseBytesize(chopSizeStr)
 	limitSize = parseBytesize(limitSizeStr)
 	return
 }
 
+type fmtLogger struct{}
+
+func (fmtLogger) Info(msg string, keyvals ...interface{}) {
+	strs := make([]string, len(keyvals))
+	for i, kv := range keyvals {
+		strs[i] = fmt.Sprintf("%v", kv)
+	}
+	fmt.Printf("%s %s\n", msg, strings.Join(strs, ","))
+}
+
 func main() {
+	// Stop upon receiving SIGTERM or CTRL-C.
+	tmos.TrapSignal(fmtLogger{}, func() {
+		fmt.Println("logjack shutting down")
+	})
 
 	// Read options
 	headPath, chopSize, limitSize, version := parseFlags()
@@ -45,35 +62,37 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = group.Start()
-	if err != nil {
+	if err = group.Start(); err != nil {
 		fmt.Printf("logjack couldn't start with file %v\n", headPath)
 		os.Exit(1)
 	}
 
-	go func() {
-		// Forever, read from stdin and write to AutoFile.
-		buf := make([]byte, readBufferSize)
-		for {
-			n, err := os.Stdin.Read(buf)
-			group.Write(buf[:n])
-			group.Flush()
-			if err != nil {
-				group.Stop()
-				if err == io.EOF {
-					os.Exit(0)
-				} else {
-					fmt.Println("logjack errored")
-					os.Exit(1)
-				}
+	// Forever read from stdin and write to AutoFile.
+	buf := make([]byte, readBufferSize)
+	for {
+		n, err := os.Stdin.Read(buf)
+		if err != nil {
+			if err := group.Stop(); err != nil {
+				fmt.Fprintf(os.Stderr, "logjack stopped with error %v\n", headPath)
+				os.Exit(1)
+			}
+			if err == io.EOF {
+				os.Exit(0)
+			} else {
+				fmt.Println("logjack errored")
+				os.Exit(1)
 			}
 		}
-	}()
-
-	// Trap signal
-	cmn.TrapSignal(func() {
-		fmt.Println("logjack shutting down")
-	})
+		_, err = group.Write(buf[:n])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "logjack failed write with error %v\n", headPath)
+			os.Exit(1)
+		}
+		if err := group.FlushAndSync(); err != nil {
+			fmt.Fprintf(os.Stderr, "logjack flushsync fail with error %v\n", headPath)
+			os.Exit(1)
+		}
+	}
 }
 
 func parseBytesize(chopSize string) int64 {

@@ -5,9 +5,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/tendermint/tendermint/libs/pubsub/query"
+	"github.com/supragya/TendermintConnector/chains/cosmos/libs/pubsub/query"
 )
 
+// TODO: fuzzy testing?
 func TestParser(t *testing.T) {
 	cases := []struct {
 		query string
@@ -75,6 +76,11 @@ func TestParser(t *testing.T) {
 		{"account.balance >= -300", false},
 		{"account.balance >>= 400", false},
 		{"account.balance=33.22.1", false},
+
+		{"slashing.amount EXISTS", true},
+		{"slashing.amount EXISTS AND account.balance=100", true},
+		{"account.balance=100 AND slashing.amount EXISTS", true},
+		{"slashing EXISTS", true},
 
 		{"hash='136E18F7E4C348B780CF873A0BF43922E5BAFA63'", true},
 		{"hash=136E18F7E4C348B780CF873A0BF43922E5BAFA63", false},

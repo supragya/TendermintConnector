@@ -5,14 +5,24 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/tendermint/tendermint/libs/pubsub"
-	"github.com/tendermint/tendermint/libs/pubsub/query"
+	"github.com/supragya/TendermintConnector/chains/cosmos/libs/pubsub/query"
 )
 
 func TestEmptyQueryMatchesAnything(t *testing.T) {
 	q := query.Empty{}
-	assert.True(t, q.Matches(pubsub.NewTagMap(map[string]string{})))
-	assert.True(t, q.Matches(pubsub.NewTagMap(map[string]string{"Asher": "Roth"})))
-	assert.True(t, q.Matches(pubsub.NewTagMap(map[string]string{"Route": "66"})))
-	assert.True(t, q.Matches(pubsub.NewTagMap(map[string]string{"Route": "66", "Billy": "Blue"})))
+
+	testCases := []struct {
+		query map[string][]string
+	}{
+		{map[string][]string{}},
+		{map[string][]string{"Asher": {"Roth"}}},
+		{map[string][]string{"Route": {"66"}}},
+		{map[string][]string{"Route": {"66"}, "Billy": {"Blue"}}},
+	}
+
+	for _, tc := range testCases {
+		match, err := q.Matches(tc.query)
+		assert.Nil(t, err)
+		assert.True(t, match)
+	}
 }

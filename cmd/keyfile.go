@@ -20,9 +20,8 @@ import (
 	"github.com/spf13/cobra"
 
 	// Tendermint Core Chains
-	// "github.com/supragya/TendermintConnector/chains"
-	"github.com/supragya/TendermintConnector/chains/irisnet"
 	"github.com/supragya/TendermintConnector/chains/cosmos"
+	"github.com/supragya/TendermintConnector/chains/iris"
 )
 
 // connectCmd represents the connect command
@@ -32,11 +31,11 @@ var keyFileCmd = &cobra.Command{
 	Long:  `Generate a keyfile for specific blockchain`,
 	Run: func(cmd *cobra.Command, args []string) {
 		switch chain {
-		case irisnet.ServicedKeyFile:
+		case iris.ServicedKeyFile:
 			if isGenerate {
-				irisnet.GenerateKeyFile(fileLocation)
+				iris.GenerateKeyFile(fileLocation)
 			} else {
-				irisnet.VerifyKeyFile(fileLocation)
+				iris.VerifyKeyFile(fileLocation)
 			}
 		case cosmos.ServicedKeyFile:
 			if isGenerate {

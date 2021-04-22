@@ -81,6 +81,18 @@ func (h *MarlinHandler) connectMarlin() error {
 			return err
 		}
 		h.marlinConn = bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
+	} else if h.connectionType == "tcpaccept" {
+		listener, err := net.Listen("tcp", h.marlinAddr)
+		if err != nil {
+			return err
+		}
+
+		conn, err := listener.Accept()
+		if err != nil {
+			return err
+		}
+
+		h.marlinConn = bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 	} else if h.connectionType == "unix" {
 		log.Info("Marlin side connector attempting a UDS listen ", h.marlinAddr)
 		listener, err := net.Listen("unix", h.marlinAddr)
@@ -288,13 +300,13 @@ func (h *MarlinHandler) recvRoutineConnection() {
 // Run acts as the entry point to marlin side connection logic for data connect interface.
 // Marlin Side Connector requires two channels for sending / recieving messages
 // from peer side connector.
-func RunSpamFilterHandler(marlinUdsFile string,
+func RunSpamFilterHandler(marlinAddr string,
 	marlinTo chan marlinTypes.MarlinMessage,
 	marlinFrom chan marlinTypes.MarlinMessage) {
-	log.Info("Starting Marlin SpamFilter Handler")
+	log.Info("Starting Marlin SpamFilter Handler. Accepting TCP incoming connections at ", marlinAddr)
 
 	for {
-		handler, err := createMarlinHandler(marlinUdsFile, marlinTo, marlinFrom, "unix", "both")
+		handler, err := createMarlinHandler(marlinAddr, marlinTo, marlinFrom, "tcpaccept", "both")
 
 		if err != nil {
 			log.Error("Error encountered while creating Marlin Handler: ", err)

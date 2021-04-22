@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -14,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	cmn "github.com/tendermint/tendermint/libs/common"
+	"github.com/supragya/TendermintConnector/chains/cosmos/libs/service"
 )
 
 const (
@@ -53,7 +52,7 @@ The Group can also be used to binary-search for some line,
 assuming that marker lines are written occasionally.
 */
 type Group struct {
-	cmn.BaseService
+	service.BaseService
 
 	ID                 string
 	Head               *AutoFile // The head AutoFile to write to
@@ -71,18 +70,24 @@ type Group struct {
 	// this ensures we can cleanup the dir after calling Stop
 	// and the routine won't be trying to access it anymore
 	doneProcessTicks chan struct{}
+
+	// TODO: When we start deleting files, we need to start tracking GroupReaders
+	// and their dependencies.
 }
 
 // OpenGroup creates a new Group with head at headPath. It returns an error if
 // it fails to open head file.
-func OpenGroup(headPath string, groupOptions ...func(*Group)) (g *Group, err error) {
-	dir := path.Dir(headPath)
+func OpenGroup(headPath string, groupOptions ...func(*Group)) (*Group, error) {
+	dir, err := filepath.Abs(filepath.Dir(headPath))
+	if err != nil {
+		return nil, err
+	}
 	head, err := OpenAutoFile(headPath)
 	if err != nil {
 		return nil, err
 	}
 
-	g = &Group{
+	g := &Group{
 		ID:                 "group:" + head.ID,
 		Head:               head,
 		headBuf:            bufio.NewWriterSize(head, 4096*10),
@@ -99,12 +104,12 @@ func OpenGroup(headPath string, groupOptions ...func(*Group)) (g *Group, err err
 		option(g)
 	}
 
-	g.BaseService = *cmn.NewBaseService(nil, "Group", g)
+	g.BaseService = *service.NewBaseService(nil, "Group", g)
 
 	gInfo := g.readGroupInfo()
 	g.minIndex = gInfo.MinIndex
 	g.maxIndex = gInfo.MaxIndex
-	return
+	return g, nil
 }
 
 // GroupCheckDuration allows you to overwrite default groupCheckDuration.
@@ -128,21 +133,25 @@ func GroupTotalSizeLimit(limit int64) func(*Group) {
 	}
 }
 
-// OnStart implements Service by starting the goroutine that checks file and
-// group limits.
+// OnStart implements service.Service by starting the goroutine that checks file
+// and group limits.
 func (g *Group) OnStart() error {
 	g.ticker = time.NewTicker(g.groupCheckDuration)
 	go g.processTicks()
 	return nil
 }
 
-// OnStop implements Service by stopping the goroutine described above.
+// OnStop implements service.Service by stopping the goroutine described above.
 // NOTE: g.Head must be closed separately using Close.
 func (g *Group) OnStop() {
 	g.ticker.Stop()
-	g.Flush() // flush any uncommitted data
+	if err := g.FlushAndSync(); err != nil {
+		g.Logger.Error("Error flushin to disk", "err", err)
+	}
 }
 
+// Wait blocks until all internal goroutines are finished. Supposed to be
+// called after Stop.
 func (g *Group) Wait() {
 	// wait for processTicks routine to finish
 	<-g.doneProcessTicks
@@ -150,7 +159,9 @@ func (g *Group) Wait() {
 
 // Close closes the head file. The group must be stopped by this moment.
 func (g *Group) Close() {
-	g.Flush() // flush any uncommitted data
+	if err := g.FlushAndSync(); err != nil {
+		g.Logger.Error("Error flushin to disk", "err", err)
+	}
 
 	g.mtx.Lock()
 	_ = g.Head.closeFile()
@@ -185,12 +196,20 @@ func (g *Group) MinIndex() int {
 	return g.minIndex
 }
 
+// Write writes the contents of p into the current head of the group. It
+// returns the number of bytes written. If nn < len(p), it also returns an
+// error explaining why the write is short.
+// NOTE: Writes are buffered so they don't write synchronously
+// TODO: Make it halt if space is unavailable
 func (g *Group) Write(p []byte) (nn int, err error) {
 	g.mtx.Lock()
 	defer g.mtx.Unlock()
 	return g.headBuf.Write(p)
 }
 
+// WriteLine writes line into the current head of the group. It also appends "\n".
+// NOTE: Writes are buffered so they don't write synchronously
+// TODO: Make it halt if space is unavailable
 func (g *Group) WriteLine(line string) error {
 	g.mtx.Lock()
 	defer g.mtx.Unlock()
@@ -198,9 +217,16 @@ func (g *Group) WriteLine(line string) error {
 	return err
 }
 
-// Flush writes any buffered data to the underlying file and commits the
-// current content of the file to stable storage.
-func (g *Group) Flush() error {
+// Buffered returns the size of the currently buffered data.
+func (g *Group) Buffered() int {
+	g.mtx.Lock()
+	defer g.mtx.Unlock()
+	return g.headBuf.Buffered()
+}
+
+// FlushAndSync writes any buffered data to the underlying file and commits the
+// current content of the file to stable storage (fsync).
+func (g *Group) FlushAndSync() error {
 	g.mtx.Lock()
 	defer g.mtx.Unlock()
 	err := g.headBuf.Flush()
@@ -309,172 +335,6 @@ func (g *Group) NewReader(index int) (*GroupReader, error) {
 		return nil, err
 	}
 	return r, nil
-}
-
-// Returns -1 if line comes after, 0 if found, 1 if line comes before.
-type SearchFunc func(line string) (int, error)
-
-// Searches for the right file in Group, then returns a GroupReader to start
-// streaming lines.
-// Returns true if an exact match was found, otherwise returns the next greater
-// line that starts with prefix.
-// CONTRACT: Caller must close the returned GroupReader
-func (g *Group) Search(prefix string, cmp SearchFunc) (*GroupReader, bool, error) {
-	g.mtx.Lock()
-	minIndex, maxIndex := g.minIndex, g.maxIndex
-	g.mtx.Unlock()
-	// Now minIndex/maxIndex may change meanwhile,
-	// but it shouldn't be a big deal
-	// (maybe we'll want to limit scanUntil though)
-
-	for {
-		curIndex := (minIndex + maxIndex + 1) / 2
-
-		// Base case, when there's only 1 choice left.
-		if minIndex == maxIndex {
-			r, err := g.NewReader(maxIndex)
-			if err != nil {
-				return nil, false, err
-			}
-			match, err := scanUntil(r, prefix, cmp)
-			if err != nil {
-				r.Close()
-				return nil, false, err
-			}
-			return r, match, err
-		}
-
-		// Read starting roughly at the middle file,
-		// until we find line that has prefix.
-		r, err := g.NewReader(curIndex)
-		if err != nil {
-			return nil, false, err
-		}
-		foundIndex, line, err := scanNext(r, prefix)
-		r.Close()
-		if err != nil {
-			return nil, false, err
-		}
-
-		// Compare this line to our search query.
-		val, err := cmp(line)
-		if err != nil {
-			return nil, false, err
-		}
-		if val < 0 {
-			// Line will come later
-			minIndex = foundIndex
-		} else if val == 0 {
-			// Stroke of luck, found the line
-			r, err := g.NewReader(foundIndex)
-			if err != nil {
-				return nil, false, err
-			}
-			match, err := scanUntil(r, prefix, cmp)
-			if !match {
-				panic("Expected match to be true")
-			}
-			if err != nil {
-				r.Close()
-				return nil, false, err
-			}
-			return r, true, err
-		} else {
-			// We passed it
-			maxIndex = curIndex - 1
-		}
-	}
-
-}
-
-// Scans and returns the first line that starts with 'prefix'
-// Consumes line and returns it.
-func scanNext(r *GroupReader, prefix string) (int, string, error) {
-	for {
-		line, err := r.ReadLine()
-		if err != nil {
-			return 0, "", err
-		}
-		if !strings.HasPrefix(line, prefix) {
-			continue
-		}
-		index := r.CurIndex()
-		return index, line, nil
-	}
-}
-
-// Returns true iff an exact match was found.
-// Pushes line, does not consume it.
-func scanUntil(r *GroupReader, prefix string, cmp SearchFunc) (bool, error) {
-	for {
-		line, err := r.ReadLine()
-		if err != nil {
-			return false, err
-		}
-		if !strings.HasPrefix(line, prefix) {
-			continue
-		}
-		val, err := cmp(line)
-		if err != nil {
-			return false, err
-		}
-		if val < 0 {
-			continue
-		} else if val == 0 {
-			r.PushLine(line)
-			return true, nil
-		} else {
-			r.PushLine(line)
-			return false, nil
-		}
-	}
-}
-
-// Searches backwards for the last line in Group with prefix.
-// Scans each file forward until the end to find the last match.
-func (g *Group) FindLast(prefix string) (match string, found bool, err error) {
-	g.mtx.Lock()
-	minIndex, maxIndex := g.minIndex, g.maxIndex
-	g.mtx.Unlock()
-
-	r, err := g.NewReader(maxIndex)
-	if err != nil {
-		return "", false, err
-	}
-	defer r.Close()
-
-	// Open files from the back and read
-GROUP_LOOP:
-	for i := maxIndex; i >= minIndex; i-- {
-		err := r.SetIndex(i)
-		if err != nil {
-			return "", false, err
-		}
-		// Scan each line and test whether line matches
-		for {
-			line, err := r.ReadLine()
-			if err == io.EOF {
-				if found {
-					return match, found, nil
-				}
-				continue GROUP_LOOP
-			} else if err != nil {
-				return "", false, err
-			}
-			if strings.HasPrefix(line, prefix) {
-				match = line
-				found = true
-			}
-			if r.CurIndex() > i {
-				if found {
-					return match, found, nil
-				}
-				continue GROUP_LOOP
-			}
-		}
-	}
-
-	return
 }
 
 // GroupInfo holds information about the group.
@@ -618,7 +478,8 @@ func (gr *GroupReader) Read(p []byte) (n int, err error) {
 	for {
 		nn, err = gr.curReader.Read(p[n:])
 		n += nn
-		if err == io.EOF {
+		switch {
+		case err == io.EOF:
 			if n >= lenP {
 				return n, nil
 			}
@@ -626,53 +487,11 @@ func (gr *GroupReader) Read(p []byte) (n int, err error) {
 			if err1 := gr.openFile(gr.curIndex + 1); err1 != nil {
 				return n, err1
 			}
-		} else if err != nil {
+		case err != nil:
 			return n, err
-		} else if nn == 0 { // empty file
+		case nn == 0: // empty file
 			return n, err
 		}
-	}
-}
-
-// ReadLine reads a line (without delimiter).
-// just return io.EOF if no new lines found.
-func (gr *GroupReader) ReadLine() (string, error) {
-	gr.mtx.Lock()
-	defer gr.mtx.Unlock()
-
-	// From PushLine
-	if gr.curLine != nil {
-		line := string(gr.curLine)
-		gr.curLine = nil
-		return line, nil
-	}
-
-	// Open file if not open yet
-	if gr.curReader == nil {
-		err := gr.openFile(gr.curIndex)
-		if err != nil {
-			return "", err
-		}
-	}
-
-	// Iterate over files until line is found
-	var linePrefix string
-	for {
-		bytesRead, err := gr.curReader.ReadBytes('\n')
-		if err == io.EOF {
-			// Open the next file
-			if err1 := gr.openFile(gr.curIndex + 1); err1 != nil {
-				return "", err1
-			}
-			if len(bytesRead) > 0 && bytesRead[len(bytesRead)-1] == byte('\n') {
-				return linePrefix + string(bytesRead[:len(bytesRead)-1]), nil
-			}
-			linePrefix += string(bytesRead)
-			continue
-		} else if err != nil {
-			return "", err
-		}
-		return linePrefix + string(bytesRead[:len(bytesRead)-1]), nil
 	}
 }
 
@@ -696,27 +515,13 @@ func (gr *GroupReader) openFile(index int) error {
 
 	// Update gr.cur*
 	if gr.curFile != nil {
-		gr.curFile.Close()
+		gr.curFile.Close() // TODO return error?
 	}
 	gr.curIndex = index
 	gr.curFile = curFile
 	gr.curReader = curReader
 	gr.curLine = nil
 	return nil
-}
-
-// PushLine makes the given line the current one, so the next time somebody
-// calls ReadLine, this line will be returned.
-// panics if called twice without calling ReadLine.
-func (gr *GroupReader) PushLine(line string) {
-	gr.mtx.Lock()
-	defer gr.mtx.Unlock()
-
-	if gr.curLine == nil {
-		gr.curLine = []byte(line)
-	} else {
-		panic("PushLine failed, already have line")
-	}
 }
 
 // CurIndex returns cursor's file index.
@@ -732,33 +537,4 @@ func (gr *GroupReader) SetIndex(index int) error {
 	gr.mtx.Lock()
 	defer gr.mtx.Unlock()
 	return gr.openFile(index)
-}
-
-//--------------------------------------------------------------------------------
-
-// A simple SearchFunc that assumes that the marker is of form
-// <prefix><number>.
-// For example, if prefix is '#HEIGHT:', the markers of expected to be of the form:
-//
-// #HEIGHT:1
-// ...
-// #HEIGHT:2
-// ...
-func MakeSimpleSearchFunc(prefix string, target int) SearchFunc {
-	return func(line string) (int, error) {
-		if !strings.HasPrefix(line, prefix) {
-			return -1, fmt.Errorf("Marker line did not have prefix: %v", prefix)
-		}
-		i, err := strconv.Atoi(line[len(prefix):])
-		if err != nil {
-			return -1, fmt.Errorf("Failed to parse marker line: %v", err.Error())
-		}
-		if target < i {
-			return 1, nil
-		} else if target == i {
-			return 0, nil
-		} else {
-			return -1, nil
-		}
-	}
 }

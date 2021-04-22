@@ -1,15 +1,28 @@
 package cosmos
 
 import (
+	"bufio"
 	"net"
 	"sync"
+	"time"
 
-	amino "github.com/tendermint/go-amino"
 	lru "github.com/hashicorp/golang-lru"
-	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/supragya/TendermintConnector/chains/cosmos/conn"
+	"github.com/supragya/TendermintConnector/chains/cosmos/crypto/ed25519"
+	flow "github.com/supragya/TendermintConnector/chains/cosmos/libs/flowrate"
+	"github.com/supragya/TendermintConnector/chains/cosmos/libs/timer"
+	tmp2p "github.com/supragya/TendermintConnector/chains/cosmos/proto/tendermint/p2p"
 	marlinTypes "github.com/supragya/TendermintConnector/types"
+	// "github.com/tendermint/go-amino"
 )
+
+type keyData struct {
+	Chain      string
+	IdString   string
+	PrivateKey []byte
+	PublicKey  []byte
+	Integrity  string
+}
 
 type TendermintHandler struct {
 	servicedChainId      uint32
@@ -17,16 +30,15 @@ type TendermintHandler struct {
 	isConnectionOutgoing bool
 	peerAddr             string
 	rpcAddr              string
-	privateKey           ed25519.PrivKeyEd25519
-	codec                *amino.Codec
+	privateKey           ed25519.PrivKey
 	baseConnection       net.Conn
-	validatorCache		 *lru.TwoQueueCache
-	maxValidHeight 			int64
+	validatorCache       *lru.TwoQueueCache
+	maxValidHeight       int64
 	secretConnection     *conn.SecretConnection
 	marlinTo             chan marlinTypes.MarlinMessage
 	marlinFrom           chan marlinTypes.MarlinMessage
 	channelBuffer        map[byte][]marlinTypes.PacketMsg
-	peerNodeInfo         DefaultNodeInfo
+	peerNodeInfo         tmp2p.DefaultNodeInfo
 	p2pConnection        P2PConnection
 	throughput           throughPutData
 	signalConnError      chan struct{}
@@ -35,24 +47,53 @@ type TendermintHandler struct {
 	signalShutThroughput chan struct{}
 }
 
-type throughPutData struct {
-	isDataConnect bool
-	toTMCore   map[string]uint32
-	fromTMCore map[string]uint32
-	spam	   map[string]uint32
-	mu         sync.Mutex
+type P2PConnection struct {
+	conn          net.Conn
+	bufConnReader *bufio.Reader
+	bufConnWriter *bufio.Writer
+	sendMonitor   *flow.Monitor
+	recvMonitor   *flow.Monitor
+	send          chan struct{}
+	pong          chan struct{}
+	// channels      []*Channel
+	// channelsIdx   map[byte]*Channel
+	errored uint32
+
+	// Closing quitSendRoutine will cause the sendRoutine to eventually quit.
+	// doneSendRoutine is closed when the sendRoutine actually quits.
+	quitSendRoutine chan struct{}
+	doneSendRoutine chan struct{}
+
+	// Closing quitRecvRouting will cause the recvRouting to eventually quit.
+	quitRecvRoutine chan struct{}
+
+	// used to ensure FlushStop and OnStop
+	// are safe to call concurrently.
+	stopMtx sync.Mutex
+
+	flushTimer *timer.ThrottleTimer // flush writes as necessary but throttled.
+	pingTimer  *time.Ticker         // send pings periodically
+
+	// close conn if pong is not received in pongTimeout
+	pongTimer     *time.Timer
+	pongTimeoutCh chan bool // true - timeout, false - peer sent pong
+
+	chStatsTimer *time.Ticker // update channel stats periodically
+
+	created time.Time // time of creation
+
+	_maxPacketMsgSize int
 }
 
-type keyData struct {
-	Chain            string
-	IdString         string
-	PrivateKeyString string
-	PublicKeyString  string
-	PrivateKey       [64]byte
-	PublicKey        [32]byte
+type throughPutData struct {
+	isDataConnect bool
+	toTMCore      map[string]uint32
+	fromTMCore    map[string]uint32
+	spam          map[string]uint32
+	mu            sync.Mutex
 }
 
 type Validator struct {
-	PublicKey	ed25519.PubKeyEd25519
-	Address		string
+	PublicKey ed25519.PubKey
+	Address   string
 }
