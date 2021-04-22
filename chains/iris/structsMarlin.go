@@ -1,7 +1,7 @@
 package iris
 
 import (
-	"bufio"
+	"bufio" 
 	"net"
 	"sync"
 	"time"

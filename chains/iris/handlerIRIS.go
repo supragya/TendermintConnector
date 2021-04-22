@@ -448,14 +448,14 @@ func (h *TendermintHandler) serviceConsensusStateMessage() (string, error) {
 			Channel: ch,
 			Packets: h.channelBuffer[ch],
 		}
-		// Send to marlin side
-		select {
-		case h.marlinTo <- message:
-		default:
-			log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
-			_ = <-h.marlinTo
-			h.marlinTo <- message
-		}
+		// // Send to marlin side
+		// select {
+		// case h.marlinTo <- message:
+		// default:
+		// 	log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
+		// 	_ = <-h.marlinTo
+		// 	h.marlinTo <- message
+		// }
 		// Reflect Back NRS message to get CsVoVOT messages
 		select {
 		case h.marlinFrom <- message:
@@ -464,7 +464,8 @@ func (h *TendermintHandler) serviceConsensusStateMessage() (string, error) {
 			_ = <-h.marlinFrom
 			h.marlinFrom <- message
 		}
-		return "+CsStNRS", nil
+		log.Debug("Found proposal, not servicing")
+		return "-CsStNRS", nil
 	case *Proposal:
 		log.Debug("Found proposal, not servicing")
 		return "-CsStPRO", nil
@@ -493,20 +494,21 @@ func (h *TendermintHandler) serviceConsensusDataMessage() (string, error) {
 
 	switch msg.(type) {
 	case *ProposalMessage:
-		message := marlinTypes.MarlinMessage{
-			ChainID: h.servicedChainId,
-			Channel: ch,
-			Packets: h.channelBuffer[ch],
-		}
-		// Send to marlin side
-		select {
-		case h.marlinTo <- message:
-		default:
-			log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
-			_ = <-h.marlinTo
-			h.marlinTo <- message
-		}
-		return "+CsDcPRO", nil
+		// message := marlinTypes.MarlinMessage{
+		// 	ChainID: h.servicedChainId,
+		// 	Channel: ch,
+		// 	Packets: h.channelBuffer[ch],
+		// }
+		// // Send to marlin side
+		// select {
+		// case h.marlinTo <- message:
+		// default:
+		// 	log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
+		// 	_ = <-h.marlinTo
+		// 	h.marlinTo <- message
+		// }
+		log.Debug("Found Proposal PRO, not servicing")
+		return "-CsDcPRO", nil
 	case *ProposalPOLMessage:
 		log.Debug("Found Proposal POL, not servicing")
 		return "-CsDcPOL", nil
@@ -1037,7 +1039,7 @@ func RunSpamFilter(rpcAddr string,
 
 func (h *TendermintHandler) beginServicingSpamFilter(id int) {
 	log.Info("Running TM side spam filter handler ", id)
-
+	// Blocking all except CsVoVOT
 	for marlinMsg := range h.marlinFrom {
 		switch marlinMsg.Channel {
 		case channelBc:
@@ -1054,7 +1056,7 @@ func (h *TendermintHandler) beginServicingSpamFilter(id int) {
 				switch msg.(type) {
 				case *NewRoundStepMessage:
 					h.throughput.putInfo("spam", "+CsStNRS", uint32(len(marlinMsg.Packets)))
-					h.marlinTo <- h.spamVerdictMessage(marlinMsg, true)
+					h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
 				default:
 					h.throughput.putInfo("spam", "-CsStUNK", uint32(len(marlinMsg.Packets)))
 					h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
@@ -1091,7 +1093,7 @@ func (h *TendermintHandler) beginServicingSpamFilter(id int) {
 				switch msg.(type) {
 				case *ProposalMessage:
 					if h.thoroughMessageCheck(msg) {
-						h.marlinTo <- h.spamVerdictMessage(marlinMsg, true)
+						h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
 						h.throughput.putInfo("spam", "+CsDcPRO", uint32(len(marlinMsg.Packets)))
 					} else {
 						h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
@@ -1099,7 +1101,7 @@ func (h *TendermintHandler) beginServicingSpamFilter(id int) {
 					}
 				case *BlockPartMessage:
 					if h.thoroughMessageCheck(msg) {
-						h.marlinTo <- h.spamVerdictMessage(marlinMsg, true)
+						h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
 						h.throughput.putInfo("spam", "+CsDcBPM", uint32(len(marlinMsg.Packets)))
 					} else {
 						h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
@@ -1164,49 +1166,57 @@ func (h *TendermintHandler) getValidators(height int64) ([]Validator, bool) {
 		value, ok := h.validatorCache.Get(height)
 		return value.([]Validator), ok
 	} else {
+		var validatorSet []Validator
 		// log.Info("Asked about height: ", height)
-		response, err := http.Get("http://" + h.rpcAddr + "/validators?height=" + strconv.Itoa((int)(height)))
-		defer response.Body.Close()
-		if err != nil {
-			log.Error("Error while sending request to get validators at height: ", height, " err: ", err)
-			return []Validator{}, false
-		} else {
-			bodyBytes, err := ioutil.ReadAll(response.Body)
+		for i := 1; i < 2; i++ {
+			// log.Info(len(validatorSet), height)
+			response, err := http.Get("http://" + h.rpcAddr + "/validators?height=" + strconv.Itoa((int)(height)) + "&per_page=100&page=" + strconv.Itoa((int)(i)))
 			if err != nil {
-				log.Error("Error while parsing request to get validators at height: ", height, " err: ", err)
+				log.Error("Error while sending request to get validators at height: ", height, " err: ", err)
 				return []Validator{}, false
-			}
-			var jsonResult map[string]interface{}
-			json.Unmarshal(bodyBytes, &jsonResult)
-			// verify interface for errors
-			if _, errorFieldFound := jsonResult["error"]; errorFieldFound {
-				return []Validator{}, false
-			}
-			validatorInfo := jsonResult["result"].(map[string]interface{})["validators"].([]interface{})
-
-			var validatorSet []Validator
-			for _, v := range validatorInfo {
-				if v.(map[string]interface{})["pub_key"].(map[string]interface{})["type"] != "tendermint/PubKeyEd25519" {
-					log.Error("Not all keys of validators are tendermint/PubKeyEd25519. Cannot continue with this validator set from TMCore")
-					return []Validator{}, false
-				}
-				decodedSlice, err := b64.StdEncoding.DecodeString(v.(map[string]interface{})["pub_key"].(map[string]interface{})["value"].(string))
+			} else {
+				bodyBytes, err := ioutil.ReadAll(response.Body)
 				if err != nil {
+					log.Error("Error while parsing request to get validators at height: ", height, " err: ", err)
 					return []Validator{}, false
 				}
-				var decodedArray ed25519.PubKey
-				copy(decodedArray[:], decodedSlice[:32])
-				validatorSet = append(validatorSet,
-					Validator{
-						PublicKey: decodedArray,
-						Address:   v.(map[string]interface{})["address"].(string),
-					})
-			}
-			h.validatorCache.Add(height, validatorSet)
+				var jsonResult map[string]interface{}
+				json.Unmarshal(bodyBytes, &jsonResult)
+				// verify interface for errors
+				if _, errorFieldFound := jsonResult["error"]; errorFieldFound {
+					return []Validator{}, false
+				}
+				validatorInfo := jsonResult["result"].(map[string]interface{})["validators"].([]interface{})
 
-			h.maxValidHeight = height
-			return validatorSet, true
+				for _, v := range validatorInfo {
+					if v.(map[string]interface{})["pub_key"].(map[string]interface{})["type"] != "tendermint/PubKeyEd25519" {
+						log.Error("Not all keys of validators are tendermint/PubKeyEd25519. Cannot continue with this validator set from TMCore")
+						return []Validator{}, false
+					}
+					decodedSlice, err := b64.StdEncoding.DecodeString(v.(map[string]interface{})["pub_key"].(map[string]interface{})["value"].(string))
+					if err != nil {
+						log.Error("Could not decode base64 pubkey")
+						return []Validator{}, false
+					}
+					decodedArray := make(ed25519.PubKey, 32)
+					// log.Info(decodedSlice[:32])
+					for i := 0; i < 32; i++ {
+						decodedArray[i] = decodedSlice[i]
+					}
+					validatorSet = append(validatorSet,
+						Validator{
+							PublicKey: decodedArray,
+							Address:   v.(map[string]interface{})["address"].(string),
+						})
+				}
+			}
+			response.Body.Close()
 		}
+		// log.Info("ht ", height, " validator set ", len(validatorSet))
+		h.validatorCache.Add(height, validatorSet)
+
+		h.maxValidHeight = height
+		return validatorSet, true
 	}
 }
 

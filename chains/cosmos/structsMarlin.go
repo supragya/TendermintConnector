@@ -92,3 +92,8 @@ type throughPutData struct {
 	spam          map[string]uint32
 	mu            sync.Mutex
 }
+
+type Validator struct {
+	PublicKey ed25519.PubKey
+	Address   string
+}

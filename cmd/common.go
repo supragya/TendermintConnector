@@ -104,9 +104,9 @@ func findAndRunSpamFilterHandler(node chains.NodeType,
 	case iris.ServicedTMCore:
 		log.Info("Attaching Irisnet TM spamfilter")
 		iris.RunSpamFilter(rpcAddr, marlinTo, marlinFrom)
-	// case cosmos.ServicedTMCore:
-	// 	log.Info("Attaching Cosmos-3 TM spamfilter")
-	// 	cosmos.RunSpamFilter(rpcAddr, marlinTo, marlinFrom)
+	case cosmos.ServicedTMCore:
+		log.Info("Attaching Cosmos TM spamfilter")
+		cosmos.RunSpamFilter(rpcAddr, marlinTo, marlinFrom)
 	default:
 		log.Error("Cannot find any spamfilter for ", node)
 		return

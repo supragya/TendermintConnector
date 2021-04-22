@@ -20,6 +20,7 @@ import (
 	// log "github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/supragya/TendermintConnector/chains/cosmos"
 	"github.com/supragya/TendermintConnector/chains/iris"
 	"github.com/supragya/TendermintConnector/marlin"
 	"github.com/supragya/TendermintConnector/types"
@@ -52,7 +53,7 @@ var spamFilterCmd = &cobra.Command{
 		if compilationChain == "iris" {
 			findAndRunSpamFilterHandler(iris.ServicedTMCore, rpcAddr, marlinTo, marlinFrom)
 		} else if compilationChain == "cosmos" {
-			// 	findAndRunSpamFilterHandler(cosmos.ServicedTMCore, rpcAddr, marlinTo, marlinFrom)
+			findAndRunSpamFilterHandler(cosmos.ServicedTMCore, rpcAddr, marlinTo, marlinFrom)
 		} else {
 			panic("Unknown chain. Exiting")
 		}
