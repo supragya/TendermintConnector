@@ -38,12 +38,15 @@ type MarlinHandler struct {
 	signalConnError chan struct{}
 	signalShutSend  chan struct{}
 	signalShutRecv  chan struct{}
+	listener        net.Listener
+	retry           int
 }
 
 func createMarlinHandler(marlinAddr string,
 	marlinTo chan marlinTypes.MarlinMessage,
 	marlinFrom chan marlinTypes.MarlinMessage,
-	connectionType string, direction string) (MarlinHandler, error) {
+	connectionType string, direction string,
+	netListener net.Listener, retry int) (MarlinHandler, error) {
 	var _canProduce, _canConsume bool
 	switch direction {
 	case "both":
@@ -70,6 +73,8 @@ func createMarlinHandler(marlinAddr string,
 		signalConnError: make(chan struct{}, 1),
 		signalShutSend:  make(chan struct{}, 1),
 		signalShutRecv:  make(chan struct{}, 1),
+		listener:        netListener,
+		retry:           retry,
 	}, nil
 }
 
@@ -82,12 +87,18 @@ func (h *MarlinHandler) connectMarlin() error {
 		}
 		h.marlinConn = bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 	} else if h.connectionType == "tcpaccept" {
-		listener, err := net.Listen("tcp", h.marlinAddr)
+		var err error
+
+		if h.retry > 0 {
+			h.listener.Close() // Close any previous listener if any
+		}
+
+		h.listener, err = net.Listen("tcp", h.marlinAddr)
 		if err != nil {
 			return err
 		}
 
-		conn, err := listener.Accept()
+		conn, err := h.listener.Accept()
 		if err != nil {
 			return err
 		}
@@ -119,8 +130,11 @@ func RunDataConnectHandler(marlinAddr string,
 	direction string) {
 	log.Info("Starting Marlin DataConnect Handler")
 
+	var netListener net.Listener
+	var retry int = 0
+
 	for {
-		handler, err := createMarlinHandler(marlinAddr, marlinTo, marlinFrom, "tcp", direction)
+		handler, err := createMarlinHandler(marlinAddr, marlinTo, marlinFrom, "tcp", direction, netListener, retry)
 
 		if err != nil {
 			log.Error("Error encountered while creating Marlin Handler: ", err)
@@ -138,13 +152,14 @@ func RunDataConnectHandler(marlinAddr string,
 
 		select {
 		case <-handler.signalConnError:
-			// Close bound port - bug
 			handler.signalShutSend <- struct{}{}
 			handler.signalShutRecv <- struct{}{}
 			goto REATTEMPT_CONNECTION
 		}
 
 	REATTEMPT_CONNECTION:
+		netListener = handler.listener
+		retry = retry + 1
 		log.Info("Error encountered with connection to the Marlin TCP Bridge. Attempting reconnect post 1 second.")
 		time.Sleep(1 * time.Second)
 	}
@@ -305,8 +320,11 @@ func RunSpamFilterHandler(marlinAddr string,
 	marlinFrom chan marlinTypes.MarlinMessage) {
 	log.Info("Starting Marlin SpamFilter Handler. Accepting TCP incoming connections at ", marlinAddr)
 
+	var netListener net.Listener
+	var retry int = 0
+
 	for {
-		handler, err := createMarlinHandler(marlinAddr, marlinTo, marlinFrom, "tcpaccept", "both")
+		handler, err := createMarlinHandler(marlinAddr, marlinTo, marlinFrom, "tcpaccept", "both", netListener, retry)
 
 		if err != nil {
 			log.Error("Error encountered while creating Marlin Handler: ", err)
@@ -330,6 +348,8 @@ func RunSpamFilterHandler(marlinAddr string,
 		}
 
 	REATTEMPT_CONNECTION:
+		netListener = handler.listener
+		retry = retry + 1
 		log.Info("Error encountered with connection to the Marlin TCP Bridge. Attempting reconnect post 1 second.")
 		time.Sleep(1 * time.Second)
 	}

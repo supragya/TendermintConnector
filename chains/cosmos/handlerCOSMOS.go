@@ -223,14 +223,15 @@ func (h *TendermintHandler) sendRoutine() {
 	for {
 		var _n int
 		var err error
-	SELECTION:
 		select {
 		case <-h.p2pConnection.pong:
 			// log.Info("Send Pong")
 			_n, err = protoWriter.WriteMsg(mustWrapPacket(&tmp2p.PacketPong{}))
 			if err != nil {
 				log.Error("Failed to send PacketPong", "err", err)
-				break SELECTION
+				h.flush()
+				h.signalConnError <- struct{}{}
+				return
 			}
 			h.p2pConnection.sendMonitor.Update(_n)
 			h.flush()
