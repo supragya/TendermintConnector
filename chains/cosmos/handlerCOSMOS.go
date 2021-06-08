@@ -252,6 +252,55 @@ func (h *TendermintHandler) sendRoutine() {
 				case *NewRoundStepMessage:
 					for _, pkt := range marlinMsg.Packets {
 						_n, err := protoWriter.WriteMsg(mustWrapPacket(&tmp2p.PacketMsg{
+							ChannelID: int32(channelCsDc),
+							EOF:       pkt.EOF == 1,
+							Data:      pkt.Bytes,
+						}))
+						if err != nil {
+							log.Error("Error occurred in sending data to TMCore: ", err)
+							// h.signalConnError <- struct{}{}
+						}
+						h.p2pConnection.sendMonitor.Update(int(_n))
+						err = h.p2pConnection.bufConnWriter.Flush()
+						if err != nil {
+							h.throughput.putInfo("to", "-CsStNRS", 1)
+							log.Error("Cannot flush buffer: ", err)
+						}
+						h.throughput.putInfo("to", "+CsStNRS", 1)
+					}
+				}
+			case channelCsDc:
+				msgEncoded, err := h.getBytesFromMarlinMessage(&marlinMsg)
+				if err != nil {
+					log.Debug("Cannot get bytes from marlin to a valid Consensus Message: ", err)
+				}
+				msg, err := decodeMsg(msgEncoded)
+				if err != nil {
+					log.Debug("Cannot decode messages to CsDc: ", err)
+				}
+				switch msg.(type) {
+				case *BlockPartMessage:
+					for _, pkt := range marlinMsg.Packets {
+						_n, err := protoWriter.WriteMsg(mustWrapPacket(&tmp2p.PacketMsg{
+							ChannelID: int32(channelCsDc),
+							EOF:       pkt.EOF == 1,
+							Data:      pkt.Bytes,
+						}))
+						if err != nil {
+							log.Error("Error occurred in sending data to TMCore: ", err)
+							// h.signalConnError <- struct{}{}
+						}
+						h.p2pConnection.sendMonitor.Update(int(_n))
+						err = h.p2pConnection.bufConnWriter.Flush()
+						if err != nil {
+							h.throughput.putInfo("to", "-CsDcBPM", 1)
+							log.Error("Cannot flush buffer: ", err)
+						}
+						h.throughput.putInfo("to", "+CsDcBPM", 1)
+					}
+				case *ProposalMessage:
+					for _, pkt := range marlinMsg.Packets {
+						_n, err := protoWriter.WriteMsg(mustWrapPacket(&tmp2p.PacketMsg{
 							ChannelID: int32(channelCsSt),
 							EOF:       pkt.EOF == 1,
 							Data:      pkt.Bytes,
@@ -263,10 +312,47 @@ func (h *TendermintHandler) sendRoutine() {
 						h.p2pConnection.sendMonitor.Update(int(_n))
 						err = h.p2pConnection.bufConnWriter.Flush()
 						if err != nil {
+							h.throughput.putInfo("to", "-CsDcBPM", 1)
 							log.Error("Cannot flush buffer: ", err)
 						}
+						h.throughput.putInfo("to", "+CsDcBPM", 1)
 					}
 				}
+				// h.throughput.putInfo("to", "=CsDc???", 1)
+				// log.Info("Data channel message");
+			case channelCsVo:
+				log.Info("vote message")
+				msgEncoded, err := h.getBytesFromMarlinMessage(&marlinMsg)
+				if err != nil {
+					log.Debug("Cannot get bytes from marlin to a valid Consensus Message: ", err)
+				}
+				msg, err := decodeMsg(msgEncoded)
+				if err != nil {
+					log.Debug("Cannot decode messages to CsVo: ", err)
+				}
+				switch msg.(type) {
+				case *VoteMessage:
+					for _, pkt := range marlinMsg.Packets {
+						_n, err := protoWriter.WriteMsg(mustWrapPacket(&tmp2p.PacketMsg{
+							ChannelID: int32(channelCsVo),
+							EOF:       pkt.EOF == 1,
+							Data:      pkt.Bytes,
+						}))
+						if err != nil {
+							log.Error("Error occurred in sending data to TMCore: ", err)
+							// h.signalConnError <- struct{}{}
+						}
+						h.p2pConnection.sendMonitor.Update(int(_n))
+						err = h.p2pConnection.bufConnWriter.Flush()
+						if err != nil {
+							h.throughput.putInfo("to", "-CsVoVOT", 1)
+							log.Error("Cannot flush buffer: ", err)
+						}
+						h.throughput.putInfo("to", "+CsVoVOT", 1)
+					}
+				}
+			default:
+				log.Warn("unknown channel encountered ", marlinMsg.Channel)
 			}
 		}
 	}
@@ -494,26 +580,39 @@ func (h *TendermintHandler) serviceConsensusDataMessage() (string, error) {
 
 	switch msg.(type) {
 	case *ProposalMessage:
-		// message := marlinTypes.MarlinMessage{
-		// 	ChainID: h.servicedChainId,
-		// 	Channel: ch,
-		// 	Packets: h.channelBuffer[ch],
-		// }
-		// // Send to marlin side
-		// select {
-		// case h.marlinTo <- message:
-		// default:
-		// 	log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
-		// 	_ = <-h.marlinTo
-		// 	h.marlinTo <- message
-		// }
-		return "-CsDcPRO", nil
+		message := marlinTypes.MarlinMessage{
+			ChainID: h.servicedChainId,
+			Channel: ch,
+			Packets: h.channelBuffer[ch],
+		}
+		// Send to marlin side
+		select {
+		case h.marlinTo <- message:
+		default:
+			log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
+			_ = <-h.marlinTo
+			h.marlinTo <- message
+		}
+		return "+CsDcPRO", nil
 	case *ProposalPOLMessage:
 		log.Debug("Found Proposal POL, not servicing")
 		return "-CsDcPOL", nil
 	case *BlockPartMessage:
-		log.Debug("Found BlockPart, not servicing")
-		return "-CsDcBPM", nil
+		message := marlinTypes.MarlinMessage{
+			ChainID: h.servicedChainId,
+			Channel: ch,
+			Packets: h.channelBuffer[ch],
+		}
+		// Send to marlin side
+		select {
+		case h.marlinTo <- message:
+		default:
+			log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
+			_ = <-h.marlinTo
+			h.marlinTo <- message
+		}
+		// log.Debug("Found BlockPart, not servicing")
+		return "+CsDcBPM", nil
 	default:
 		log.Warning("Unknown Consensus data message ", msg)
 		return "-CsDcXXX", nil
