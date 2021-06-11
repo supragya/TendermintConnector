@@ -38,6 +38,7 @@ type TendermintHandler struct {
 	marlinTo             chan marlinTypes.MarlinMessage
 	marlinFrom           chan marlinTypes.MarlinMessage
 	channelBuffer        map[byte][]marlinTypes.PacketMsg
+	proposerCache        map[int64]Validator
 	peerNodeInfo         tmp2p.DefaultNodeInfo
 	p2pConnection        P2PConnection
 	throughput           throughPutData

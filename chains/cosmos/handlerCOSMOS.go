@@ -18,6 +18,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
@@ -252,55 +253,6 @@ func (h *TendermintHandler) sendRoutine() {
 				case *NewRoundStepMessage:
 					for _, pkt := range marlinMsg.Packets {
 						_n, err := protoWriter.WriteMsg(mustWrapPacket(&tmp2p.PacketMsg{
-							ChannelID: int32(channelCsDc),
-							EOF:       pkt.EOF == 1,
-							Data:      pkt.Bytes,
-						}))
-						if err != nil {
-							log.Error("Error occurred in sending data to TMCore: ", err)
-							// h.signalConnError <- struct{}{}
-						}
-						h.p2pConnection.sendMonitor.Update(int(_n))
-						err = h.p2pConnection.bufConnWriter.Flush()
-						if err != nil {
-							h.throughput.putInfo("to", "-CsStNRS", 1)
-							log.Error("Cannot flush buffer: ", err)
-						}
-						h.throughput.putInfo("to", "+CsStNRS", 1)
-					}
-				}
-			case channelCsDc:
-				msgEncoded, err := h.getBytesFromMarlinMessage(&marlinMsg)
-				if err != nil {
-					log.Debug("Cannot get bytes from marlin to a valid Consensus Message: ", err)
-				}
-				msg, err := decodeMsg(msgEncoded)
-				if err != nil {
-					log.Debug("Cannot decode messages to CsDc: ", err)
-				}
-				switch msg.(type) {
-				case *BlockPartMessage:
-					for _, pkt := range marlinMsg.Packets {
-						_n, err := protoWriter.WriteMsg(mustWrapPacket(&tmp2p.PacketMsg{
-							ChannelID: int32(channelCsDc),
-							EOF:       pkt.EOF == 1,
-							Data:      pkt.Bytes,
-						}))
-						if err != nil {
-							log.Error("Error occurred in sending data to TMCore: ", err)
-							// h.signalConnError <- struct{}{}
-						}
-						h.p2pConnection.sendMonitor.Update(int(_n))
-						err = h.p2pConnection.bufConnWriter.Flush()
-						if err != nil {
-							h.throughput.putInfo("to", "-CsDcBPM", 1)
-							log.Error("Cannot flush buffer: ", err)
-						}
-						h.throughput.putInfo("to", "+CsDcBPM", 1)
-					}
-				case *ProposalMessage:
-					for _, pkt := range marlinMsg.Packets {
-						_n, err := protoWriter.WriteMsg(mustWrapPacket(&tmp2p.PacketMsg{
 							ChannelID: int32(channelCsSt),
 							EOF:       pkt.EOF == 1,
 							Data:      pkt.Bytes,
@@ -312,47 +264,10 @@ func (h *TendermintHandler) sendRoutine() {
 						h.p2pConnection.sendMonitor.Update(int(_n))
 						err = h.p2pConnection.bufConnWriter.Flush()
 						if err != nil {
-							h.throughput.putInfo("to", "-CsDcBPM", 1)
 							log.Error("Cannot flush buffer: ", err)
 						}
-						h.throughput.putInfo("to", "+CsDcBPM", 1)
 					}
 				}
-				// h.throughput.putInfo("to", "=CsDc???", 1)
-				// log.Info("Data channel message");
-			case channelCsVo:
-				log.Info("vote message")
-				msgEncoded, err := h.getBytesFromMarlinMessage(&marlinMsg)
-				if err != nil {
-					log.Debug("Cannot get bytes from marlin to a valid Consensus Message: ", err)
-				}
-				msg, err := decodeMsg(msgEncoded)
-				if err != nil {
-					log.Debug("Cannot decode messages to CsVo: ", err)
-				}
-				switch msg.(type) {
-				case *VoteMessage:
-					for _, pkt := range marlinMsg.Packets {
-						_n, err := protoWriter.WriteMsg(mustWrapPacket(&tmp2p.PacketMsg{
-							ChannelID: int32(channelCsVo),
-							EOF:       pkt.EOF == 1,
-							Data:      pkt.Bytes,
-						}))
-						if err != nil {
-							log.Error("Error occurred in sending data to TMCore: ", err)
-							// h.signalConnError <- struct{}{}
-						}
-						h.p2pConnection.sendMonitor.Update(int(_n))
-						err = h.p2pConnection.bufConnWriter.Flush()
-						if err != nil {
-							h.throughput.putInfo("to", "-CsVoVOT", 1)
-							log.Error("Cannot flush buffer: ", err)
-						}
-						h.throughput.putInfo("to", "+CsVoVOT", 1)
-					}
-				}
-			default:
-				log.Warn("unknown channel encountered ", marlinMsg.Channel)
 			}
 		}
 	}
@@ -470,7 +385,7 @@ FOR_LOOP:
 				h.throughput.putInfo("from", submessage, 1)
 				h.channelBuffer[channelCsSt] = h.channelBuffer[channelCsSt][:0]
 			case channelCsDc:
-				log.Info("TMCore -> Connector CsDc servicing")
+				log.Debug("TMCore -> Connector CsDc servicing")
 				submessage, err := h.serviceConsensusDataMessage()
 				if err != nil {
 					log.Warning("Could not service consensus data message due to err: ", err)
@@ -536,13 +451,13 @@ func (h *TendermintHandler) serviceConsensusStateMessage() (string, error) {
 			Packets: h.channelBuffer[ch],
 		}
 		// Send to marlin side
-		select {
-		case h.marlinTo <- message:
-		default:
-			log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
-			_ = <-h.marlinTo
-			h.marlinTo <- message
-		}
+		// select {
+		// case h.marlinTo <- message:
+		// default:
+		// 	log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
+		// 	_ = <-h.marlinTo
+		// 	h.marlinTo <- message
+		// }
 		// Reflect Back NRS message to get CsVoVOT messages
 		select {
 		case h.marlinFrom <- message:
@@ -551,9 +466,21 @@ func (h *TendermintHandler) serviceConsensusStateMessage() (string, error) {
 			_ = <-h.marlinFrom
 			h.marlinFrom <- message
 		}
-		return "+CsStNRS", nil
+		return "-CsStNRS", nil
 	case *Proposal:
-		log.Debug("Found proposal, not servicing")
+		// message := marlinTypes.MarlinMessage{
+		// 	ChainID: h.servicedChainId,
+		// 	Channel: ch,
+		// 	Packets: h.channelBuffer[ch],
+		// }
+		// select {
+		// case h.marlinFrom <- message:
+		// default:
+		// 	log.Warning("Too many messages in channel marlinFrom. Dropping oldest messages")
+		// 	_ = <-h.marlinFrom
+		// 	h.marlinFrom <- message
+		// }
+		// log.Debug("Found proposal, not servicing")
 		return "-CsStPRO", nil
 	case *NewValidBlockMessage:
 		log.Debug("Found NewValidBlock, not servicing")
@@ -580,38 +507,38 @@ func (h *TendermintHandler) serviceConsensusDataMessage() (string, error) {
 
 	switch msg.(type) {
 	case *ProposalMessage:
-		// message := marlinTypes.MarlinMessage{
-		// 	ChainID: h.servicedChainId,
-		// 	Channel: ch,
-		// 	Packets: h.channelBuffer[ch],
-		// }
-		// // Send to marlin side
-		// select {
-		// case h.marlinTo <- message:
-		// default:
-		// 	log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
-		// 	_ = <-h.marlinTo
-		// 	h.marlinTo <- message
-		// }
+		message := marlinTypes.MarlinMessage{
+			ChainID: h.servicedChainId,
+			Channel: ch,
+			Packets: h.channelBuffer[ch],
+		}
+		// Send to marlin side
+		select {
+		case h.marlinTo <- message:
+		default:
+			log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
+			_ = <-h.marlinTo
+			h.marlinTo <- message
+		}
 		return "+CsDcPRO", nil
 	case *ProposalPOLMessage:
 		log.Debug("Found Proposal POL, not servicing")
 		return "-CsDcPOL", nil
 	case *BlockPartMessage:
-		// message := marlinTypes.MarlinMessage{
-		// 	ChainID: h.servicedChainId,
-		// 	Channel: ch,
-		// 	Packets: h.channelBuffer[ch],
-		// }
-		// // Send to marlin side
-		// select {
-		// case h.marlinTo <- message:
-		// default:
-		// 	log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
-		// 	_ = <-h.marlinTo
-		// 	h.marlinTo <- message
-		// }
-		// log.Debug("Found BlockPart, not servicing")
+		message := marlinTypes.MarlinMessage{
+			ChainID: h.servicedChainId,
+			Channel: ch,
+			Packets: h.channelBuffer[ch],
+		}
+		// Send to marlin side
+		select {
+		case h.marlinTo <- message:
+		default:
+			log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
+			_ = <-h.marlinTo
+			h.marlinTo <- message
+		}
+		log.Debug("Found BlockPart, not servicing")
 		return "+CsDcBPM", nil
 	default:
 		log.Warning("Unknown Consensus data message ", msg)
@@ -757,6 +684,7 @@ func createTMHandler(peerAddr string,
 		marlinTo:       marlinTo,
 		marlinFrom:     marlinFrom,
 		channelBuffer:  make(map[byte][]marlinTypes.PacketMsg),
+		proposerCache:  make(map[int64]Validator),
 		throughput: throughPutData{
 			isDataConnect: isDataConnect,
 			toTMCore:      make(map[string]uint32),
@@ -1161,6 +1089,7 @@ func (h *TendermintHandler) beginServicingSpamFilter(id int) {
 				}
 			}
 		case channelCsVo:
+			// log.Info("consensus vote")
 			msgBytes := h.getBytesFromChannelBuffer(marlinMsg.Packets)
 			msg, err := decodeMsg(msgBytes)
 			if err != nil {
@@ -1182,6 +1111,7 @@ func (h *TendermintHandler) beginServicingSpamFilter(id int) {
 				}
 			}
 		case channelCsDc:
+			log.Info("data channel --")
 			msgBytes := h.getBytesFromChannelBuffer(marlinMsg.Packets)
 			msg, err := decodeMsg(msgBytes)
 			if err != nil {
@@ -1243,9 +1173,16 @@ func (h *TendermintHandler) thoroughMessageCheck(msg Message) bool {
 		}
 		return false
 	case *BlockPartMessage:
+		log.Info("Block part message: ", msg)
 		// Cache hash verification, needs Proposal message support
 		return false
 	case *ProposalMessage:
+		// log.Info("Block proposal message: ", msg)
+		val, ok := h.getProposerAtHeight(msg.(ProposalMessage).Proposal.Height)
+		if !ok {
+			return false
+		}
+
 		// if _, ok := h.getValidators(msg.(*ProposalMessage).Proposal.Height); ok {
 		// 	// Check signature, add to map so that BPM messages can be verified
 		// 	return true
@@ -1253,6 +1190,66 @@ func (h *TendermintHandler) thoroughMessageCheck(msg Message) bool {
 		return false
 	default:
 		return false
+	}
+}
+
+func (h *TendermintHandler) getProposerAtHeight(height int64) (Validator, bool) {
+	if val, ok := h.proposerCache[height]; ok {
+		// Let clear some stuff from cache
+		delete(h.proposerCache, height-10)
+
+		return val, true
+	}
+	// Find stuff from RPC
+
+	if validatorlist, ok := h.getValidators(height); ok {
+		type ConsensusResponse struct {
+			Result struct {
+				RoundState struct {
+					HeightRoundStep string `json:"height/round/step"`
+					Proposer        struct {
+						Address string `json:"address"`
+						Index   int    `json:"index"`
+					} `json:"proposer"`
+				} `json:"round_state"`
+			} `json:"result"`
+		}
+
+		response, err := http.Get("http://" + h.rpcAddr + "/consensus_state")
+		if err != nil {
+			log.Error("Error while sending request to get blockchain status")
+			return Validator{}, false
+		}
+
+		bodyBytes, err := ioutil.ReadAll(response.Body)
+		var jsonResult ConsensusResponse
+		err = json.Unmarshal(bodyBytes, &jsonResult)
+		if err != nil {
+			log.Error("Undecodable response from rpc for next validator search")
+			return Validator{}, false
+		}
+		response.Body.Close()
+
+		heightString := strings.Split(jsonResult.Result.RoundState.HeightRoundStep, "/")[0]
+		heightFromResponse, err := strconv.ParseInt(heightString, 10, 64)
+		if heightFromResponse != height {
+			log.Error("Cannot find height match. Not newest proposal")
+			return Validator{}, false
+		}
+
+		candidateValidator := validatorlist[jsonResult.Result.RoundState.Proposer.Index]
+		if strings.ToUpper(candidateValidator.Address) == jsonResult.Result.RoundState.Proposer.Address {
+			return candidateValidator, true
+		}
+
+		for _, val := range validatorlist {
+			if strings.ToUpper(val.Address) == jsonResult.Result.RoundState.Proposer.Address {
+				return val, true
+			}
+		}
+
+	} else {
+		return Validator{}, false
 	}
 }
 
