@@ -470,7 +470,7 @@ FOR_LOOP:
 				h.throughput.putInfo("from", submessage, 1)
 				h.channelBuffer[channelCsSt] = h.channelBuffer[channelCsSt][:0]
 			case channelCsDc:
-				log.Debug("TMCore -> Connector CsDc servicing")
+				log.Info("TMCore -> Connector CsDc servicing")
 				submessage, err := h.serviceConsensusDataMessage()
 				if err != nil {
 					log.Warning("Could not service consensus data message due to err: ", err)
@@ -536,13 +536,13 @@ func (h *TendermintHandler) serviceConsensusStateMessage() (string, error) {
 			Packets: h.channelBuffer[ch],
 		}
 		// Send to marlin side
-		// select {
-		// case h.marlinTo <- message:
-		// default:
-		// 	log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
-		// 	_ = <-h.marlinTo
-		// 	h.marlinTo <- message
-		// }
+		select {
+		case h.marlinTo <- message:
+		default:
+			log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
+			_ = <-h.marlinTo
+			h.marlinTo <- message
+		}
 		// Reflect Back NRS message to get CsVoVOT messages
 		select {
 		case h.marlinFrom <- message:
@@ -551,7 +551,7 @@ func (h *TendermintHandler) serviceConsensusStateMessage() (string, error) {
 			_ = <-h.marlinFrom
 			h.marlinFrom <- message
 		}
-		return "-CsStNRS", nil
+		return "+CsStNRS", nil
 	case *Proposal:
 		log.Debug("Found proposal, not servicing")
 		return "-CsStPRO", nil
@@ -580,37 +580,37 @@ func (h *TendermintHandler) serviceConsensusDataMessage() (string, error) {
 
 	switch msg.(type) {
 	case *ProposalMessage:
-		message := marlinTypes.MarlinMessage{
-			ChainID: h.servicedChainId,
-			Channel: ch,
-			Packets: h.channelBuffer[ch],
-		}
-		// Send to marlin side
-		select {
-		case h.marlinTo <- message:
-		default:
-			log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
-			_ = <-h.marlinTo
-			h.marlinTo <- message
-		}
+		// message := marlinTypes.MarlinMessage{
+		// 	ChainID: h.servicedChainId,
+		// 	Channel: ch,
+		// 	Packets: h.channelBuffer[ch],
+		// }
+		// // Send to marlin side
+		// select {
+		// case h.marlinTo <- message:
+		// default:
+		// 	log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
+		// 	_ = <-h.marlinTo
+		// 	h.marlinTo <- message
+		// }
 		return "+CsDcPRO", nil
 	case *ProposalPOLMessage:
 		log.Debug("Found Proposal POL, not servicing")
 		return "-CsDcPOL", nil
 	case *BlockPartMessage:
-		message := marlinTypes.MarlinMessage{
-			ChainID: h.servicedChainId,
-			Channel: ch,
-			Packets: h.channelBuffer[ch],
-		}
-		// Send to marlin side
-		select {
-		case h.marlinTo <- message:
-		default:
-			log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
-			_ = <-h.marlinTo
-			h.marlinTo <- message
-		}
+		// message := marlinTypes.MarlinMessage{
+		// 	ChainID: h.servicedChainId,
+		// 	Channel: ch,
+		// 	Packets: h.channelBuffer[ch],
+		// }
+		// // Send to marlin side
+		// select {
+		// case h.marlinTo <- message:
+		// default:
+		// 	log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
+		// 	_ = <-h.marlinTo
+		// 	h.marlinTo <- message
+		// }
 		// log.Debug("Found BlockPart, not servicing")
 		return "+CsDcBPM", nil
 	default:
