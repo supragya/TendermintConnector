@@ -1,7 +1,7 @@
 package iris
 
 import (
-	"bufio" 
+	"bufio"
 	"net"
 	"sync"
 	"time"
@@ -25,7 +25,7 @@ type keyData struct {
 }
 
 type TendermintHandler struct {
-	servicedChainId      uint32
+	servicedChainId      uint8
 	listenPort           int
 	isConnectionOutgoing bool
 	peerAddr             string

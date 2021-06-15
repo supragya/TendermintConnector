@@ -21,10 +21,10 @@ while True:
             data = connection.recv(10)
             for i in range(len(data)):
                 print(data[i], end=" ", flush=True)
-            if data:
-                connection.sendall(data)
-            else:
-                break
+            # if data:
+            #     connection.sendall(data)
+            # else:
+            #     break
             
     finally:
         # Clean up the connection

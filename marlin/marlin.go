@@ -14,16 +14,16 @@ import (
 	marlinTypes "github.com/supragya/TendermintConnector/types"
 
 	// Protocols
-	wireProtocol "github.com/supragya/TendermintConnector/protocols/tmDataTransferProtocolv1"
+	wireProtocol "github.com/supragya/TendermintConnector/protocols/tmDataTransferProtocolv2"
 )
 
-var currentlyServicing uint32
+var currentlyServicing uint8
 
 // ALlowServicedChainMessages allows handlers to register a single chain
 // to allow through marlin side connector. Initially there is no blockchain message
 // allowed to passthrough. One can register the chainId to look for in messages
 // correspoding to chains available in marlinTypes.servicedChains to allow.
-func AllowServicedChainMessages(servicedChainId uint32) {
+func AllowServicedChainMessages(servicedChainId uint8) {
 	currentlyServicing = servicedChainId
 }
 
@@ -205,10 +205,17 @@ func (h *MarlinHandler) sendRoutineConnection() {
 			})
 		}
 
+		wirePackets2 := []*wireProtocol.PacketMsg{}
+		for _, pkt := range msg.Packets2 {
+			wirePackets2 = append(wirePackets2, &wireProtocol.PacketMsg{
+				Eof:       pkt.EOF,
+				DataBytes: pkt.Bytes,
+			})
+		}
+
 		sendData := &wireProtocol.TendermintMessage{
-			ChainId: msg.ChainID,
-			Channel: uint32(msg.Channel),
-			Packets: wirePackets,
+			Packets:  wirePackets,
+			Packets2: wirePackets2,
 		}
 
 		proto3Marshalled, err := proto.Marshal(sendData)
@@ -218,9 +225,9 @@ func (h *MarlinHandler) sendRoutineConnection() {
 			return
 		}
 
-		binary.BigEndian.PutUint64(messageLen, uint64(len(proto3Marshalled)))
-
-		encodedData := append(messageLen, proto3Marshalled...)
+		binary.BigEndian.PutUint64(messageLen, uint64(len(proto3Marshalled))+2)
+		encodedData := append(messageLen, msg.ChainID, msg.Channel)
+		encodedData = append(encodedData, proto3Marshalled...)
 
 		n, err := h.marlinConn.Write(encodedData)
 		if err != nil {
@@ -266,7 +273,6 @@ func (h *MarlinHandler) recvRoutineConnection() {
 			h.signalConnError <- struct{}{}
 			return
 		}
-
 		messageLen := binary.BigEndian.Uint64(partialLen)
 
 		var buffer = make([]byte, messageLen)
@@ -277,27 +283,37 @@ func (h *MarlinHandler) recvRoutineConnection() {
 			return
 		}
 
-		if !h.canConsume {
+		if !h.canConsume || len(buffer) <= 2 {
 			continue
 		}
 
+		chainID := uint8(buffer[0])
+		channel := byte(buffer[1])
+
 		tmMessage := wireProtocol.TendermintMessage{}
-		proto.Unmarshal(buffer, &tmMessage)
+		proto.Unmarshal(buffer[:2], &tmMessage)
 		log.Debug("Marlin -> Connector recieved message: ", buffer, " ", tmMessage)
 
-		if tmMessage.GetChainId() == currentlyServicing && messageLen > 0 {
+		if chainID == currentlyServicing {
 			internalPackets := []marlinTypes.PacketMsg{}
 			for _, pkt := range tmMessage.GetPackets() {
 				internalPackets = append(internalPackets, marlinTypes.PacketMsg{
-					ChannelID: tmMessage.GetChannel(),
-					EOF:       pkt.GetEof(),
-					Bytes:     pkt.GetDataBytes(),
+					EOF:   pkt.GetEof(),
+					Bytes: pkt.GetDataBytes(),
+				})
+			}
+			internalPackets2 := []marlinTypes.PacketMsg{}
+			for _, pkt := range tmMessage.GetPackets2() {
+				internalPackets2 = append(internalPackets, marlinTypes.PacketMsg{
+					EOF:   pkt.GetEof(),
+					Bytes: pkt.GetDataBytes(),
 				})
 			}
 			message := marlinTypes.MarlinMessage{
-				ChainID: tmMessage.GetChainId(),
-				Channel: byte(tmMessage.GetChannel()),
-				Packets: internalPackets,
+				ChainID:  chainID,
+				Channel:  channel,
+				Packets:  internalPackets,
+				Packets2: internalPackets2,
 			}
 			select {
 			case h.marlinFrom <- message:
@@ -382,15 +398,11 @@ func (h *MarlinHandler) sendRoutineSpamFilter() {
 			continue
 		}
 
-		// if msg.Channel == byte(0x01) {
-		// 	log.Debug("+++++++Allowing: ", msg.PacketId, " ", msg.Channel)
-		// } else {
-		// 	log.Debug("Disallowing----: ", msg.PacketId, " ", msg.Channel)
-		// }
 		binary.BigEndian.PutUint64(messageId, uint64(msg.PacketId))
 		encodedData := append(messageId, msg.Channel)
 		// msg.Channel is byte(0x00) from TMCore handler if message is marked spam
 		// msg.Channel is byte(0x01) from TMCore handler if message is allowed
+
 		n, err := h.marlinConn.Write(encodedData)
 		if err != nil {
 			log.Error("Marlin <- Connector Error encountered when writing to marlin UDS interface: ", err)
@@ -450,8 +462,15 @@ func (h *MarlinHandler) recvRoutineSpamFilter() {
 			return
 		}
 
+		if len(buffer) <= 2 {
+			continue
+		}
+
+		chainID := uint8(buffer[0])
+		channel := byte(buffer[1])
+
 		tmMessage := wireProtocol.TendermintMessage{}
-		err = proto.Unmarshal(buffer, &tmMessage)
+		err = proto.Unmarshal(buffer[2:], &tmMessage)
 
 		if err != nil {
 			log.Warning("proto3 deciphering failed! returning disallow")
@@ -461,20 +480,27 @@ func (h *MarlinHandler) recvRoutineSpamFilter() {
 				PacketId: messageId,
 			}
 		} else {
-			if tmMessage.GetChainId() == currentlyServicing && messageLen > 0 {
+			if chainID == currentlyServicing {
 				internalPackets := []marlinTypes.PacketMsg{}
 				for _, pkt := range tmMessage.GetPackets() {
 					internalPackets = append(internalPackets, marlinTypes.PacketMsg{
-						ChannelID: tmMessage.GetChannel(),
-						EOF:       pkt.GetEof(),
-						Bytes:     pkt.GetDataBytes(),
+						EOF:   pkt.GetEof(),
+						Bytes: pkt.GetDataBytes(),
+					})
+				}
+				internalPackets2 := []marlinTypes.PacketMsg{}
+				for _, pkt := range tmMessage.GetPackets2() {
+					internalPackets2 = append(internalPackets2, marlinTypes.PacketMsg{
+						EOF:   pkt.GetEof(),
+						Bytes: pkt.GetDataBytes(),
 					})
 				}
 				message := marlinTypes.MarlinMessage{
-					ChainID:  tmMessage.GetChainId(),
-					Channel:  byte(tmMessage.GetChannel()),
+					ChainID:  chainID,
+					Channel:  channel,
 					PacketId: messageId,
 					Packets:  internalPackets,
+					Packets2: internalPackets2,
 				}
 				select {
 				case h.marlinFrom <- message:

@@ -20,7 +20,7 @@ var supportedChains = []string{
 
 // Marlin TM Encoder/Decoder Protocols
 var marlinTMProtocols = []string{
-	"Marlin Tendermint Data Transfer Protocol v1",
+	"Marlin Tendermint Data Transfer Protocol v2",
 }
 
 var RootCmdVersion string = prepareVersionString()
