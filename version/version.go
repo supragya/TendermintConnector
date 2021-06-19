@@ -13,14 +13,13 @@ var buildTime string = "Mon Dec 21 13:26:38 UTC 2020"
 
 // Supported Chains
 var supportedChains = []string{
-	"Tendermint v0.34.7",
 	"Cosmoshub-4 mainnet",
 	"Irishub-1 mainnet",
 }
 
 // Marlin TM Encoder/Decoder Protocols
 var marlinTMProtocols = []string{
-	"Marlin Tendermint Data Transfer Protocol v2",
+	"Marlin TM Data Transfer Protocol v2",
 }
 
 var RootCmdVersion string = prepareVersionString()

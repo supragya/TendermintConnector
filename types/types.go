@@ -16,9 +16,6 @@ type PacketMsg struct {
 // DANGER - Do not change mappings for serviced chains. APPEND ONLY
 // These are vital for encoding / decoding to correct chains.
 var ServicedChains = map[string]uint8{
-	"irisnet-0.16.3-mainnet": 1,
-	"cosmos-3-mainnet":       2,
-	"tm34":                   3,
 	"irisnet-1.0-mainnet":    6, // earlier used to be 4, made 6 for network changes
-	"cosmoshub-4-mainnet":    7, // earlier used to be 5, made 7 for network changes
+	"cosmoshub-4-mainnet":    10, // Made 10 when wire protocol changed to v2. earlier used to be 5, made 7 for network changes
 }

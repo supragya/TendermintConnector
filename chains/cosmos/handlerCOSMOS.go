@@ -516,7 +516,7 @@ func (h *TendermintHandler) serviceConsensusDataMessage() (string, error) {
 			Packets2: h.channelBuffer[ch],
 		}
 
-		log.Info("Sending an Ox90 message ", len(message.Packets), len(message.Packets2))
+		// log.Info("Sending an Ox90 message ", len(message.Packets), len(message.Packets2))
 		// Send to marlin side
 		select {
 		case h.marlinTo <- message:
