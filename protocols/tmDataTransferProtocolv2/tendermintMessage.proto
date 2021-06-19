@@ -1,0 +1,12 @@
+syntax = "proto3";
+package tmDataTransferProtocol;
+
+message PacketMsg {
+    uint32 eof = 2;
+    bytes dataBytes = 3;
+}
+
+message TendermintMessage {
+    repeated PacketMsg packets = 3;
+    repeated PacketMsg packets2 = 4;
+}

@@ -18,6 +18,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
@@ -357,9 +358,8 @@ FOR_LOOP:
 			}
 			h.channelBuffer[byte(pkt.PacketMsg.ChannelID)] = append(h.channelBuffer[byte(pkt.PacketMsg.ChannelID)],
 				marlinTypes.PacketMsg{
-					ChannelID: uint32(pkt.PacketMsg.ChannelID),
-					EOF:       eof,
-					Bytes:     pkt.PacketMsg.Data,
+					EOF:   eof,
+					Bytes: pkt.PacketMsg.Data,
 				})
 
 			// In case of incomplete message
@@ -467,7 +467,6 @@ func (h *TendermintHandler) serviceConsensusStateMessage() (string, error) {
 		}
 		return "-CsStNRS", nil
 	case *Proposal:
-		log.Debug("Found proposal, not servicing")
 		return "-CsStPRO", nil
 	case *NewValidBlockMessage:
 		log.Debug("Found NewValidBlock, not servicing")
@@ -494,26 +493,40 @@ func (h *TendermintHandler) serviceConsensusDataMessage() (string, error) {
 
 	switch msg.(type) {
 	case *ProposalMessage:
-		// message := marlinTypes.MarlinMessage{
-		// 	ChainID: h.servicedChainId,
-		// 	Channel: ch,
-		// 	Packets: h.channelBuffer[ch],
-		// }
-		// // Send to marlin side
-		// select {
-		// case h.marlinTo <- message:
-		// default:
-		// 	log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
-		// 	_ = <-h.marlinTo
-		// 	h.marlinTo <- message
-		// }
-		return "-CsDcPRO", nil
+		h.cahcedDcProposal = msg.(*ProposalMessage)
+		h.cachedDcProposalPacket = make([]marlinTypes.PacketMsg, 0)
+		for _, pkt := range h.channelBuffer[ch] {
+			h.cachedDcProposalPacket = append(h.cachedDcProposalPacket, pkt)
+		}
+		return "@CsDcPRO", nil
 	case *ProposalPOLMessage:
 		log.Debug("Found Proposal POL, not servicing")
 		return "-CsDcPOL", nil
 	case *BlockPartMessage:
+
+		if h.cahcedDcProposal == nil || msg.(*BlockPartMessage).Height != h.cahcedDcProposal.Proposal.Height || msg.(*BlockPartMessage).Round != h.cahcedDcProposal.Proposal.Round {
+			// log.Info("Cannot find the bpm match ", msg.(*BlockPartMessage).Height, msg.(*BlockPartMessage).Round)
+			return "-CsDcBPM", nil
+		}
+		// log.Info("Found the bpm match ", msg.(*BlockPartMessage).Height, msg.(*BlockPartMessage).Round)
+		message := marlinTypes.MarlinMessage{
+			ChainID:  h.servicedChainId,
+			Channel:  byte(0x90),
+			Packets:  h.cachedDcProposalPacket,
+			Packets2: h.channelBuffer[ch],
+		}
+
+		// log.Info("Sending an Ox90 message ", len(message.Packets), len(message.Packets2))
+		// Send to marlin side
+		select {
+		case h.marlinTo <- message:
+		default:
+			log.Warning("Too many messages in channel marlinTo. Dropping oldest messages")
+			_ = <-h.marlinTo
+			h.marlinTo <- message
+		}
 		log.Debug("Found BlockPart, not servicing")
-		return "-CsDcBPM", nil
+		return "+CsDcBPM", nil
 	default:
 		log.Warning("Unknown Consensus data message ", msg)
 		return "-CsDcXXX", nil
@@ -658,6 +671,7 @@ func createTMHandler(peerAddr string,
 		marlinTo:       marlinTo,
 		marlinFrom:     marlinFrom,
 		channelBuffer:  make(map[byte][]marlinTypes.PacketMsg),
+		proposerCache:  make(map[int64]Validator),
 		throughput: throughPutData{
 			isDataConnect: isDataConnect,
 			toTMCore:      make(map[string]uint32),
@@ -1062,6 +1076,7 @@ func (h *TendermintHandler) beginServicingSpamFilter(id int) {
 				}
 			}
 		case channelCsVo:
+			// log.Info("consensus vote")
 			msgBytes := h.getBytesFromChannelBuffer(marlinMsg.Packets)
 			msg, err := decodeMsg(msgBytes)
 			if err != nil {
@@ -1086,31 +1101,89 @@ func (h *TendermintHandler) beginServicingSpamFilter(id int) {
 			msgBytes := h.getBytesFromChannelBuffer(marlinMsg.Packets)
 			msg, err := decodeMsg(msgBytes)
 			if err != nil {
-				h.throughput.putInfo("spam", "-CsDcUNK", uint32(len(marlinMsg.Packets)))
+				h.throughput.putInfo("spam", "-CsDcUNK(bare)", uint32(len(marlinMsg.Packets)))
 				h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
 			} else {
 				switch msg.(type) {
 				case *ProposalMessage:
-					if h.thoroughMessageCheck(msg) {
-						h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
-						h.throughput.putInfo("spam", "+CsDcPRO", uint32(len(marlinMsg.Packets)))
-					} else {
-						h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
-						h.throughput.putInfo("spam", "-CsDcPRO", uint32(len(marlinMsg.Packets)))
-					}
+					h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
+					h.throughput.putInfo("spam", "-CsDcPRO(bare)", uint32(len(marlinMsg.Packets)))
 				case *BlockPartMessage:
-					if h.thoroughMessageCheck(msg) {
-						h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
-						h.throughput.putInfo("spam", "+CsDcBPM", uint32(len(marlinMsg.Packets)))
-					} else {
-						h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
-						h.throughput.putInfo("spam", "-CsDcBPM", uint32(len(marlinMsg.Packets)))
-					}
+					h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
+					h.throughput.putInfo("spam", "-CsDcBPM(bare)", uint32(len(marlinMsg.Packets)))
 				default:
 					h.throughput.putInfo("spam", "-CsVoUNK", uint32(len(marlinMsg.Packets)))
 					h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
 				}
 			}
+		case byte(0x90):
+			// Special case: here the Proposal message comes bundled with a block part message
+			// log.Info("0x90 channel -- ", len(marlinMsg.Packets), len(marlinMsg.Packets2))
+			msgBytes := h.getBytesFromChannelBuffer(marlinMsg.Packets)
+			msg, err := decodeMsg(msgBytes)
+			if err != nil {
+				h.throughput.putInfo("spam", "-CsDcUNK", uint32(len(marlinMsg.Packets)))
+				h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
+			}
+			// log.Info("here ", msg)
+			msgBytes2 := h.getBytesFromChannelBuffer(marlinMsg.Packets2)
+			msg2, err := decodeMsg(msgBytes2)
+			if err != nil {
+				h.throughput.putInfo("spam", "-CsDcUNK", uint32(len(marlinMsg.Packets2)))
+				h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
+			}
+			// log.Info("here2 ", msg2)
+			switch msg.(type) {
+			case *ProposalMessage:
+				switch msg2.(type) {
+				case *BlockPartMessage:
+					pro := msg.(*ProposalMessage)
+					bpm := msg2.(*BlockPartMessage)
+
+					if pro.Proposal.Height != bpm.Height || pro.Proposal.Round != bpm.Round {
+						log.Info("PRO BPM height round mismatch")
+						h.throughput.putInfo("spam", "-CsDcBPM", 1)
+						h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
+						break
+					}
+
+					val, ok := h.getProposerAtHeight(pro.Proposal.Height)
+					if !ok {
+						log.Info("error getting proposer at height")
+						h.throughput.putInfo("spam", "-CsDcBPM", 1)
+						h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
+						break
+					}
+
+					p := pro.Proposal.ToProto()
+					ok = val.PublicKey.VerifySignature(ProposalSignBytes("cosmoshub-4", p), pro.Proposal.Signature)
+					if !ok {
+						log.Info("PRO signature mismatch ", pro.Proposal.Height, pro.Proposal.Round, val.Address)
+						h.throughput.putInfo("spam", "-CsDcBPM", 1)
+						h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
+						break
+					}
+
+					err := bpm.Part.Proof.Verify(pro.Proposal.BlockID.PartSetHeader.Hash, bpm.Part.Bytes)
+					if err != nil {
+						log.Info("PRO BPM merkle verification error")
+						h.throughput.putInfo("spam", "-CsDcBPM", 1)
+						h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
+						break
+					}
+
+					h.throughput.putInfo("spam", "+CsDcBPM", 1)
+					h.marlinTo <- h.spamVerdictMessage(marlinMsg, true)
+
+				default:
+					h.throughput.putInfo("spam", "-CsDcBPM", 1)
+					h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
+				}
+			default:
+				h.throughput.putInfo("spam", "-CsDcBPM", 1)
+				h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
+			}
+
 		case channelCsVs:
 			h.throughput.putInfo("spam", "-CsVs", 1)
 			h.marlinTo <- h.spamVerdictMessage(marlinMsg, false)
@@ -1144,9 +1217,16 @@ func (h *TendermintHandler) thoroughMessageCheck(msg Message) bool {
 		}
 		return false
 	case *BlockPartMessage:
+		log.Info("Block part message: ", msg)
 		// Cache hash verification, needs Proposal message support
 		return false
 	case *ProposalMessage:
+		// log.Info("Block proposal message: ", msg)
+		_, ok := h.getProposerAtHeight(msg.(ProposalMessage).Proposal.Height)
+		if !ok {
+			return false
+		}
+
 		// if _, ok := h.getValidators(msg.(*ProposalMessage).Proposal.Height); ok {
 		// 	// Check signature, add to map so that BPM messages can be verified
 		// 	return true
@@ -1155,6 +1235,65 @@ func (h *TendermintHandler) thoroughMessageCheck(msg Message) bool {
 	default:
 		return false
 	}
+}
+
+func (h *TendermintHandler) getProposerAtHeight(height int64) (Validator, bool) {
+	if val, ok := h.proposerCache[height]; ok {
+		// Let clear some stuff from cache
+		delete(h.proposerCache, height-10)
+
+		return val, true
+	}
+	// Find stuff from RPC
+
+	if validatorlist, ok := h.getValidators(height); ok {
+		type ConsensusResponse struct {
+			Result struct {
+				RoundState struct {
+					HeightRoundStep string `json:"height/round/step"`
+					Proposer        struct {
+						Address string `json:"address"`
+						Index   int    `json:"index"`
+					} `json:"proposer"`
+				} `json:"round_state"`
+			} `json:"result"`
+		}
+
+		response, err := http.Get("http://" + h.rpcAddr + "/consensus_state")
+		if err != nil {
+			log.Error("Error while sending request to get blockchain status")
+			return Validator{}, false
+		}
+
+		bodyBytes, err := ioutil.ReadAll(response.Body)
+		var jsonResult ConsensusResponse
+		err = json.Unmarshal(bodyBytes, &jsonResult)
+		if err != nil {
+			log.Error("Undecodable response from rpc for next validator search")
+			return Validator{}, false
+		}
+		response.Body.Close()
+
+		heightString := strings.Split(jsonResult.Result.RoundState.HeightRoundStep, "/")[0]
+		heightFromResponse, err := strconv.ParseInt(heightString, 10, 64)
+		if heightFromResponse != height {
+			log.Error("Cannot find height match. Not newest proposal")
+			return Validator{}, false
+		}
+
+		candidateValidator := validatorlist[jsonResult.Result.RoundState.Proposer.Index]
+		if strings.ToUpper(candidateValidator.Address) == jsonResult.Result.RoundState.Proposer.Address {
+			return candidateValidator, true
+		}
+
+		for _, val := range validatorlist {
+			if strings.ToUpper(val.Address) == jsonResult.Result.RoundState.Proposer.Address {
+				return val, true
+			}
+		}
+
+	}
+	return Validator{}, false
 }
 
 func (h *TendermintHandler) getValidators(height int64) ([]Validator, bool) {

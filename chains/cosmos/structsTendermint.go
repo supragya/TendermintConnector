@@ -101,9 +101,58 @@ type Proposal struct {
 	Signature []byte    `json:"signature"`
 }
 
+// ToProto converts Proposal to protobuf
+func (p *Proposal) ToProto() *tmproto.Proposal {
+	if p == nil {
+		return &tmproto.Proposal{}
+	}
+	pb := new(tmproto.Proposal)
+
+	pb.BlockID = p.BlockID.ToProto()
+	pb.Type = p.Type
+	pb.Height = p.Height
+	pb.Round = p.Round
+	pb.PolRound = p.POLRound
+	pb.Timestamp = p.Timestamp
+	pb.Signature = p.Signature
+
+	return pb
+}
+
 // ProposalMessage is sent when a new block is proposed.
 type ProposalMessage struct {
 	Proposal *Proposal
+}
+
+// ProposalSignBytes returns the proto-encoding of the canonicalized Proposal,
+// for signing. Panics if the marshaling fails.
+//
+// The encoded Protobuf message is varint length-prefixed (using MarshalDelimited)
+// for backwards-compatibility with the Amino encoding, due to e.g. hardware
+// devices that rely on this encoding.
+//
+// See CanonicalizeProposal
+func ProposalSignBytes(chainID string, p *tmproto.Proposal) []byte {
+	pb := CanonicalizeProposal(chainID, p)
+	bz, err := protoio.MarshalDelimited(&pb)
+	if err != nil {
+		panic(err)
+	}
+
+	return bz
+}
+
+// CanonicalizeVote transforms the given Proposal to a CanonicalProposal.
+func CanonicalizeProposal(chainID string, proposal *tmproto.Proposal) tmproto.CanonicalProposal {
+	return tmproto.CanonicalProposal{
+		Type:      tmproto.ProposalType,
+		Height:    proposal.Height,       // encoded as sfixed64
+		Round:     int64(proposal.Round), // encoded as sfixed64
+		POLRound:  int64(proposal.PolRound),
+		BlockID:   CanonicalizeBlockID(proposal.BlockID),
+		Timestamp: proposal.Timestamp,
+		ChainID:   chainID,
+	}
 }
 
 //-------------------------------------

@@ -357,9 +357,8 @@ FOR_LOOP:
 			}
 			h.channelBuffer[byte(pkt.PacketMsg.ChannelID)] = append(h.channelBuffer[byte(pkt.PacketMsg.ChannelID)],
 				marlinTypes.PacketMsg{
-					ChannelID: uint32(pkt.PacketMsg.ChannelID),
-					EOF:       eof,
-					Bytes:     pkt.PacketMsg.Data,
+					EOF:   eof,
+					Bytes: pkt.PacketMsg.Data,
 				})
 
 			// In case of incomplete message

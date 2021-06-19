@@ -25,26 +25,29 @@ type keyData struct {
 }
 
 type TendermintHandler struct {
-	servicedChainId      uint32
-	listenPort           int
-	isConnectionOutgoing bool
-	peerAddr             string
-	rpcAddr              string
-	privateKey           ed25519.PrivKey
-	baseConnection       net.Conn
-	validatorCache       *lru.TwoQueueCache
-	maxValidHeight       int64
-	secretConnection     *conn.SecretConnection
-	marlinTo             chan marlinTypes.MarlinMessage
-	marlinFrom           chan marlinTypes.MarlinMessage
-	channelBuffer        map[byte][]marlinTypes.PacketMsg
-	peerNodeInfo         tmp2p.DefaultNodeInfo
-	p2pConnection        P2PConnection
-	throughput           throughPutData
-	signalConnError      chan struct{}
-	signalShutSend       chan struct{}
-	signalShutRecv       chan struct{}
-	signalShutThroughput chan struct{}
+	servicedChainId        uint8
+	listenPort             int
+	isConnectionOutgoing   bool
+	peerAddr               string
+	rpcAddr                string
+	privateKey             ed25519.PrivKey
+	baseConnection         net.Conn
+	validatorCache         *lru.TwoQueueCache
+	maxValidHeight         int64
+	secretConnection       *conn.SecretConnection
+	marlinTo               chan marlinTypes.MarlinMessage
+	marlinFrom             chan marlinTypes.MarlinMessage
+	channelBuffer          map[byte][]marlinTypes.PacketMsg
+	proposerCache          map[int64]Validator
+	peerNodeInfo           tmp2p.DefaultNodeInfo
+	p2pConnection          P2PConnection
+	throughput             throughPutData
+	cahcedDcProposal       *ProposalMessage
+	cachedDcProposalPacket []marlinTypes.PacketMsg
+	signalConnError        chan struct{}
+	signalShutSend         chan struct{}
+	signalShutRecv         chan struct{}
+	signalShutThroughput   chan struct{}
 }
 
 type P2PConnection struct {

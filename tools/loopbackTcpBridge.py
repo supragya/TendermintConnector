@@ -4,7 +4,7 @@ import sys
 # Create a TCP/IP socket
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-server_address = ('localhost', 21906)
+server_address = ('localhost', 22005)
 sock.bind(server_address)
 
 sock.listen(1)

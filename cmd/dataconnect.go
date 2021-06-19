@@ -107,7 +107,7 @@ func init() {
 		dataconnectCmd.Flags().BoolVarP(&isConnectionOutgoing, "dial", "d", false, "Connector DIALs TMCore (TM34 node) if flag is set, otherwise connector LISTENs for connections.")
 		dataconnectCmd.Flags().StringVarP(&marlinIP, "marlinip", "m", "127.0.0.1", "Marlin TCP Bridge IP address")
 		dataconnectCmd.Flags().IntVarP(&marlinPort, "marlinport", "n", 22401, "Marlin TCP Bridge port")
-		dataconnectCmd.Flags().StringVarP(&direction, "direction", "e", "both", "Direction of connection [both/producer/consumer]")
+		dataconnectCmd.Flags().StringVarP(&direction, "direction", "e", "producer", "Direction of connection [both/producer/consumer]")
 		dataconnectCmd.Flags().IntVarP(&listenPortPeer, "listenportpeer", "l", 22400, "Port on which Connector should listen for incoming connections from TM34 peer")
 	} else if compilationChain == "iris" {
 		dataconnectCmd.Flags().StringVarP(&peerIP, "peerip", "i", "127.0.0.1", "Iris node IP address")
@@ -118,7 +118,7 @@ func init() {
 		dataconnectCmd.Flags().BoolVarP(&isConnectionOutgoing, "dial", "d", false, "Connector DIALs TMCore (iris node) if flag is set, otherwise connector LISTENs for connections.")
 		dataconnectCmd.Flags().StringVarP(&marlinIP, "marlinip", "m", "127.0.0.1", "Marlin TCP Bridge IP address")
 		dataconnectCmd.Flags().IntVarP(&marlinPort, "marlinport", "n", 21901, "Marlin TCP Bridge port")
-		dataconnectCmd.Flags().StringVarP(&direction, "direction", "e", "both", "Direction of connection [both/producer/consumer]")
+		dataconnectCmd.Flags().StringVarP(&direction, "direction", "e", "producer", "Direction of connection [both/producer/consumer]")
 		dataconnectCmd.Flags().IntVarP(&listenPortPeer, "listenportpeer", "l", 21900, "Port on which Connector should listen for incoming connections from iris peer")
 	} else if compilationChain == "cosmos" {
 		dataconnectCmd.Flags().StringVarP(&peerIP, "peerip", "i", "127.0.0.1", "Gaia node IP address")
@@ -129,7 +129,7 @@ func init() {
 		dataconnectCmd.Flags().BoolVarP(&isConnectionOutgoing, "dial", "d", false, "Connector DIALs TMCore (gaia node) if flag is set, otherwise connector LISTENs for connections.")
 		dataconnectCmd.Flags().StringVarP(&marlinIP, "marlinip", "m", "127.0.0.1", "Marlin TCP Bridge IP address")
 		dataconnectCmd.Flags().IntVarP(&marlinPort, "marlinport", "n", 22401, "Marlin TCP Bridge port")
-		dataconnectCmd.Flags().StringVarP(&direction, "direction", "e", "both", "Direction of connection [both/producer/consumer]")
+		dataconnectCmd.Flags().StringVarP(&direction, "direction", "e", "producer", "Direction of connection [both/producer/consumer]")
 		dataconnectCmd.Flags().IntVarP(&listenPortPeer, "listenportpeer", "l", 22400, "Port on which Connector should listen for incoming connections from cosmos peer")
 	} 
 }
